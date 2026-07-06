@@ -44,7 +44,8 @@ lerna-debug.log*
 
 #code agents
 CLAUDE.md
-.claude
+.claude/*
+!.claude/settings.json
 
 # temp directory
 .temp

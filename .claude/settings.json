@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit *)",
+      "Bash(npx eslint *)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm run typecheck *)",
+      "Bash(pnpm run lint *)",
+      "Bash(npm run typecheck *)",
+      "Bash(npm run lint *)",
+      "Bash(npx prisma migrate status *)",
+      "Bash(npx prisma migrate diff *)",
+      "Bash(npx prisma validate *)",
+      "mcp__ide__getDiagnostics"
+    ]
+  }
+}
