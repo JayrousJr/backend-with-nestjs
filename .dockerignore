@@ -1,0 +1,13 @@
+node_modules
+dist
+generated
+.git
+.env
+.env.*
+!.env.example
+uploads
+*.log
+.claude
+CLAUDE.md
+nestjs_best_practices
+coverage
