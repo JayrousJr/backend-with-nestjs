@@ -206,6 +206,17 @@ After 5 failed login attempts, the account is locked for 15 minutes. These are c
 3. When access token expires, call `/refresh` with the refresh token
 4. Each refresh rotates the session — old refresh token is revoked
 
+## Security notes
+
+Defaults that matter when you deploy this:
+
+- **Refresh token in an HttpOnly cookie** (`SameSite` via `COOKIE_SAMESITE`, `strict` by default; set `none` + HTTPS only if the SPA is on a different registrable domain). Login/refresh return just the access token — the refresh token is never exposed to JavaScript. SameSite is also what protects the cookie-authenticated refresh/logout routes from CSRF.
+- **Access tokens are short-lived** (`JWT_ACCESS_EXPIRES_IN`, 15m) and sessions are server-side and individually revocable.
+- **Swagger is off in production** unless `SWAGGER_ENABLED=true` is set explicitly.
+- **Uploads** are restricted to an allowlist (`storage.constants.ts`); the stored extension comes from the validated MIME type, not the filename, and SVG is excluded because it can carry script. Downloads are path-contained to the uploads root and sent as attachments unless the type is known-safe inline.
+- **`TRUST_PROXY`** must be set to the number of proxy hops (nginx = 1) or client IPs in session records and rate limits will be the proxy's. It defaults to 0 — never trust `X-Forwarded-For` blindly.
+- **`docker-compose.prod.yml` requires `POSTGRES_PASSWORD` and `REDIS_PASSWORD`** and refuses to start without them; Redis runs with `requirepass`, and neither datastore publishes a host port.
+
 ## Module Architecture
 
 Every feature module follows the same structure:

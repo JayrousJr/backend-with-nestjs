@@ -106,7 +106,21 @@ export class AppConfigService {
   }
 
   get swaggerEnabled(): boolean {
-    return this.config.get<boolean>('SWAGGER_ENABLED', true);
+    // Publishing every route, DTO and auth scheme is a production information
+    // leak, so docs are off there unless explicitly switched on.
+    return this.config.get<boolean>('SWAGGER_ENABLED') ?? !this.isProduction;
+  }
+
+  get cookieSameSite(): 'strict' | 'lax' | 'none' {
+    return this.config.get<'strict' | 'lax' | 'none'>(
+      'COOKIE_SAMESITE',
+      'strict',
+    );
+  }
+
+  /** Trusted proxy hops; needed for correct client IPs behind nginx. */
+  get trustProxy(): number {
+    return this.config.get<number>('TRUST_PROXY', 0);
   }
 
   /** Data retention windows in days — 0 disables that purge entirely. */

@@ -24,5 +24,8 @@
   "invalid_refresh_token": "Invalid refresh token.",
   "account_locked": "Account temporarily locked due to too many failed login attempts. Please try again in {minutes} minutes.",
   "already_subscribed": "You have already been subscribed to our newsletter",
-  "already_unsubscribed": "You have already unsubscribed to our newsletter"
+  "already_unsubscribed": "You have already unsubscribed to our newsletter",
+  "unsupported_file_type": "Unsupported file type",
+  "invalid_path": "Invalid file path",
+  "file_required": "A file is required"
 }

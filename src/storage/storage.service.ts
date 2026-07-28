@@ -1,17 +1,23 @@
 /// <reference types="multer" />
 import {
+  BadRequestException,
   Inject,
   Injectable,
   NotFoundException,
   StreamableFile,
 } from '@nestjs/common';
-import { createReadStream } from 'fs';
-import { join, extname } from 'path';
+import { createReadStream, existsSync } from 'fs';
+import { basename, extname, resolve, sep } from 'path';
 import { randomUUID } from 'crypto';
 import { PaginationInput, offsetPaginate } from '@common';
 import { StorageRepository } from './storage.repository';
 import type { StorageDriver } from './drivers/storage-driver.interface';
-import { STORAGE_DRIVER } from './storage.constants';
+import {
+  ALLOWED_MIME_TYPES,
+  INLINE_MIME_TYPES,
+  MIME_BY_EXTENSION,
+  STORAGE_DRIVER,
+} from './storage.constants';
 import {
   FileFilterInput,
   FileOrderInput,
@@ -27,8 +33,19 @@ export class StorageService {
   ) {}
 
   async upload(file: Express.Multer.File, folder: string, uploaderId?: number) {
-    const ext = extname(file.originalname);
-    const key = `${folder}/${randomUUID()}${ext}`;
+    if (!file) throw new BadRequestException('errors.file_required');
+
+    // Extension comes from the validated MIME type, never from the uploaded
+    // filename — otherwise "logo.png.html" would be stored (and served) as HTML.
+    const ext = ALLOWED_MIME_TYPES[file.mimetype];
+    if (!ext) throw new BadRequestException('errors.unsupported_file_type');
+
+    // Folder is caller-supplied; keep it to a flat, safe segment so it cannot
+    // climb out of the uploads root.
+    const safeFolder = folder
+      .replace(/[^a-zA-Z0-9/_-]/g, '')
+      .replace(/\.+/g, '');
+    const key = `${safeFolder || 'general'}/${randomUUID()}${ext}`;
     const uri = await this.driver.put(file.buffer, key, file.mimetype);
 
     return this.files.create({
@@ -99,8 +116,30 @@ export class StorageService {
   }
 
   getFileStream(uri: string): StreamableFile {
-    const filePath = join(process.cwd(), 'uploads', uri);
-    const stream = createReadStream(filePath);
-    return new StreamableFile(stream);
+    const uploadsRoot = resolve(process.cwd(), 'uploads');
+    const filePath = resolve(uploadsRoot, uri);
+
+    // `uri` is user-controlled: without this check "../../.env" would resolve
+    // outside the uploads root and stream arbitrary server files.
+    if (!filePath.startsWith(uploadsRoot + sep)) {
+      throw new BadRequestException('errors.invalid_path');
+    }
+    if (!existsSync(filePath)) {
+      throw new NotFoundException('errors.record_not_found');
+    }
+
+    // Serve with the type implied by our own stored extension (helmet already
+    // sends X-Content-Type-Options: nosniff), and force a download for
+    // anything that isn't a known-safe inline type.
+    const type =
+      MIME_BY_EXTENSION[extname(filePath).toLowerCase()] ??
+      'application/octet-stream';
+
+    return new StreamableFile(createReadStream(filePath), {
+      type,
+      disposition: INLINE_MIME_TYPES.has(type)
+        ? 'inline'
+        : `attachment; filename="${basename(filePath)}"`,
+    });
   }
 }

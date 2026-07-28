@@ -24,5 +24,8 @@
   "invalid_refresh_token": "Tokeni ya kuonyesha upya si sahihi.",
   "account_locked": "Akaunti imefungwa kwa muda kutokana na majaribio mengi ya kuingia yaliyoshindwa. Tafadhali jaribu tena baada ya dakika {minutes}.",
   "already_subscribed": "Tayari ume jisajili kwenye jarida letu",
-  "already_unsubscribed": "Tayari umejiondoa kwenye jarida letu"
+  "already_unsubscribed": "Tayari umejiondoa kwenye jarida letu",
+  "unsupported_file_type": "Aina ya faili haikubaliki",
+  "invalid_path": "Njia ya faili si sahihi",
+  "file_required": "Faili linahitajika"
 }

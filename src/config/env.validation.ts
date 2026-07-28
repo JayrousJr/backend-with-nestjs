@@ -24,7 +24,7 @@ export const envValidationSchema = Joi.object({
   SMTP_ENCRYPTION: Joi.string().optional().allow(''),
 
   JWT_ACCESS_SECRET: Joi.string().min(32).required(),
-  JWT_ACCESS_EXPIRES_IN: Joi.string().default('30m'),
+  JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
   JWT_REFRESH_SECRET: Joi.string().min(32).required(),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
 
@@ -45,7 +45,15 @@ export const envValidationSchema = Joi.object({
   KAFKA_GROUP_ID: Joi.string().default('nestjs-graphql-template'),
 
   ENABLE_MULTI_TENANCY: Joi.boolean().default(false),
-  SWAGGER_ENABLED: Joi.boolean().default(true),
+  // Unset means "enabled outside production" — see AppConfigService.
+  SWAGGER_ENABLED: Joi.boolean().optional(),
+  // Number of trusted reverse-proxy hops in front of the app (0 = none).
+  TRUST_PROXY: Joi.number().min(0).default(0),
+  // 'strict' unless the SPA is on a different registrable domain than the
+  // API, which needs 'none' (and HTTPS).
+  COOKIE_SAMESITE: Joi.string()
+    .valid('strict', 'lax', 'none')
+    .default('strict'),
 
   // Data retention (days). 0 disables that purge entirely.
   RETENTION_SOFT_DELETED_DAYS: Joi.number().min(0).default(30),

@@ -7,13 +7,15 @@ import {
   HttpStatus,
   NotFoundException,
   Param,
+  UnauthorizedException,
   Post,
   Query,
   Req,
   Res,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import type { Request, Response } from 'express';
+import ms from 'ms';
+import type { CookieOptions, Request, Response } from 'express';
 import { AppConfigService } from '@config';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser, Public } from '@common';
@@ -30,6 +32,8 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
+const REFRESH_COOKIE = 'refresh_token';
+
 function sessionMetadata(req: Request): SessionMetadata {
   return {
     userAgent: req.headers['user-agent'],
@@ -45,6 +49,41 @@ export class AuthController {
     private readonly googleOauth: GoogleOauthService,
     private readonly config: AppConfigService,
   ) {}
+
+  /**
+   * The refresh token lives in an HttpOnly cookie so JavaScript — and any XSS
+   * on the frontend — cannot read it. SameSite also makes it unusable in a
+   * cross-site request, which is what stands in for CSRF protection on the
+   * refresh/logout routes.
+   */
+  private refreshCookieOptions(): CookieOptions {
+    return {
+      httpOnly: true,
+      secure: this.config.isProduction,
+      sameSite: this.config.cookieSameSite,
+      path: `/${this.config.apiPrefix}/auth`,
+      maxAge: ms(this.config.jwtRefresh.expiresIn as ms.StringValue),
+    };
+  }
+
+  /** Sets the refresh cookie and returns only the access token to the client. */
+  private issueTokens(
+    res: Response,
+    tokens: { accessToken: string; refreshToken: string },
+  ) {
+    res.cookie(
+      REFRESH_COOKIE,
+      tokens.refreshToken,
+      this.refreshCookieOptions(),
+    );
+    return { accessToken: tokens.accessToken };
+  }
+
+  /** Cookie first (browsers); body is the fallback for non-browser clients. */
+  private readRefreshToken(req: Request, dto?: RefreshDto): string | undefined {
+    const cookies = req.cookies as Record<string, string> | undefined;
+    return cookies?.[REFRESH_COOKIE] ?? dto?.refreshToken;
+  }
 
   @Public()
   @Post('register')
@@ -101,9 +140,14 @@ export class AuthController {
         profile,
         sessionMetadata(req),
       );
+      res.cookie(
+        REFRESH_COOKIE,
+        tokens.refreshToken,
+        this.refreshCookieOptions(),
+      );
+      // Only the short-lived access token travels in the URL fragment.
       const fragment = new URLSearchParams({
         accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
       });
       return res.redirect(`${callbackUrl}#${fragment.toString()}`);
     } catch {
@@ -172,31 +216,56 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  login(@Body() dto: LoginDto, @Req() req: Request) {
-    return this.authService.login(dto, sessionMetadata(req));
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const tokens = await this.authService.login(dto, sessionMetadata(req));
+    return this.issueTokens(res, tokens);
   }
 
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  refresh(@Body() dto: RefreshDto, @Req() req: Request) {
-    return this.authService.refreshToken(
-      dto.refreshToken,
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body() dto?: RefreshDto,
+  ) {
+    const refreshToken = this.readRefreshToken(req, dto);
+    if (!refreshToken) {
+      throw new UnauthorizedException('errors.invalid_refresh_token');
+    }
+    const tokens = await this.authService.refreshToken(
+      refreshToken,
       sessionMetadata(req),
     );
+    return this.issueTokens(res, tokens);
   }
 
   @Public()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  logout(@Body() dto: RefreshDto) {
-    return this.authService.logout(dto.refreshToken);
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body() dto?: RefreshDto,
+  ) {
+    const refreshToken = this.readRefreshToken(req, dto);
+    if (refreshToken) await this.authService.logout(refreshToken);
+    // Logout stays idempotent — always clear the cookie.
+    res.clearCookie(REFRESH_COOKIE, { path: `/${this.config.apiPrefix}/auth` });
   }
 
   @Post('logout-all')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
-  logoutAll(@AuthUser() user: CurrentUserData) {
-    return this.authService.logoutAll(user.id);
+  async logoutAll(
+    @AuthUser() user: CurrentUserData,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.authService.logoutAll(user.id);
+    res.clearCookie(REFRESH_COOKIE, { path: `/${this.config.apiPrefix}/auth` });
   }
 }

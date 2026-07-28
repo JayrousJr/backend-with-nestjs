@@ -1,6 +1,7 @@
 declare const module: any;
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
@@ -11,8 +12,15 @@ import { AppModule } from './app.module';
 import { AppConfigService } from '@config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(AppConfigService);
+
+  // Behind a reverse proxy, req.ip is the proxy unless Express is told how
+  // many hops to trust. Session records and IP rate limits depend on this;
+  // trusting blindly would let clients spoof X-Forwarded-For.
+  if (config.trustProxy > 0) {
+    app.set('trust proxy', config.trustProxy);
+  }
 
   app.use(
     helmet({
@@ -67,10 +75,11 @@ async function bootstrap() {
   // requests elsewhere also can't be replayed by a malicious site (an attacker
   // can't read/set the Authorization header), so CSRF only applies to requests
   // authenticated via cookies (e.g. session/refresh flows).
-  // The whole /auth/* surface (register/login/refresh/logout/logout-all) is
-  // token-based — credentials travel as request body fields or a Bearer header,
-  // never as ambient cookies a malicious site could ride along — so CSRF has
-  // nothing to add there.
+  // /auth/* is exempt because its credentials are never ambient: they arrive
+  // as body fields or a Bearer header. The one exception is the refresh-token
+  // cookie used by refresh/logout — SameSite (see COOKIE_SAMESITE, 'strict' by
+  // default) is what stops a malicious site from riding along with it, since
+  // the browser simply won't attach the cookie to a cross-site request.
   // Note: req.path is relative to the '/api' mount point below, so these
   // correspond to the full '/api/graphql' and '/api/auth/*'.
   app.use('/api', (req: Request, res: Response, next: NextFunction) => {
