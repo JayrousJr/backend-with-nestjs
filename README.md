@@ -206,6 +206,27 @@ After 5 failed login attempts, the account is locked for 15 minutes. These are c
 3. When access token expires, call `/refresh` with the refresh token
 4. Each refresh rotates the session — old refresh token is revoked
 
+## SEO engine
+
+Search engines only ever see published content; everything else is behind auth and marked noindex by the frontend.
+
+**Crawler endpoints** (public REST, cached):
+
+| Endpoint               | Purpose                                                                                                                                         |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/sitemap.xml` | Built live from the DB: static public routes plus every `PUBLISHED`, non-`noIndex` post, with `xhtml:link` hreflang alternates for translations |
+| `GET /api/robots.txt`  | Disallows every authenticated path and advertises the sitemap                                                                                   |
+
+Google requires a sitemap to cover the host it is served from, with one exception: cross-host sitemaps are accepted when both hosts are verified in Search Console. So either topology works — proxy `/sitemap.xml` from the site's origin (see the frontend's `nginx.conf`), or serve it from the API host and point `SITEMAP_URL` at it.
+
+**Content model.** `Post` carries the fields SEO actually needs: `slug` (unique per locale), `metaTitle`, `metaDescription`, `canonicalUrl`, `noIndex`, `publishedAt`, `coverImage`, plus `locale` + `translationKey` so translations of one article form an hreflang group.
+
+- Slugs are generated from the title and de-duplicated (`-2`, `-3`, …).
+- **Renaming a slug creates a 301 automatically** — the old URL keeps the ranking it earned. `Redirect` rows are also manageable by hand, and the SPA's 404 route consults `resolveRedirect(path)` before showing an error.
+- `bodyHtml` is sanitized with an allowlist on every write, so stored content can never carry script.
+
+**GraphQL surface:** `getPublishedPosts` / `getPostBySlug` are `@Public()`; `getPosts`, `getPost` need `content.read`; mutations need `content.manage`; redirect management needs `seo.manage`.
+
 ## Security notes
 
 Defaults that matter when you deploy this:
