@@ -107,7 +107,7 @@
     "@types/pg": "^8.20.0",
     "@types/sanitize-html": "^2.16.1",
     "@types/supertest": "^7.2.0",
-    "eslint": "^9.39.4",
+    "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
     "globals": "^17.4.0",
