@@ -65,7 +65,7 @@
     "csrf-csrf": "^4.0.3",
     "dotenv": "^17.4.1",
     "express-session": "^1.19.0",
-    "graphql": "^16.13.2",
+    "graphql": "^16.14.2",
     "graphql-subscriptions": "^3.0.0",
     "graphql-ws": "^6.0.8",
     "helmet": "^8.1.0",
