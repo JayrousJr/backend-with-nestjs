@@ -27,5 +27,6 @@
   "already_unsubscribed": "Tayari umejiondoa kwenye jarida letu",
   "unsupported_file_type": "Aina ya faili haikubaliki",
   "invalid_path": "Njia ya faili si sahihi",
-  "file_required": "Faili linahitajika"
+  "file_required": "Faili linahitajika",
+  "invalid_slug": "Kitambulisho cha URL si sahihi"
 }

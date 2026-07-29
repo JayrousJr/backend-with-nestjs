@@ -34,6 +34,13 @@ export const PERMISSIONS = {
   ANALYTICS: {
     READ: 'analytics.read',
   },
+  CONTENT: {
+    READ: 'content.read',
+    MANAGE: 'content.manage',
+  },
+  SEO: {
+    MANAGE: 'seo.manage',
+  },
 } as const;
 
 type PermissionGroups = typeof PERMISSIONS;

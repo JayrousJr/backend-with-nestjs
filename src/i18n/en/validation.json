@@ -19,5 +19,6 @@
   "matches": "{property} format is invalid.",
   "isDefined": "{property} is required.",
   "isOptional": "{property} is optional.",
-  "failed": "Input validation failed."
+  "failed": "Input validation failed.",
+  "isPath": "$property must start with /"
 }

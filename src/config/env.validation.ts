@@ -31,6 +31,10 @@ export const envValidationSchema = Joi.object({
   CORS_ORIGINS: Joi.string().default('http://localhost:3005'),
   // Where OAuth callbacks land the user back in the SPA
   FRONTEND_URL: Joi.string().default('http://localhost:5173'),
+  // Absolute URL advertised in robots.txt. Defaults to <FRONTEND_URL>/sitemap.xml
+  // (proxy it there via nginx); set it to the API's own URL instead if you
+  // serve the sitemap from this host and verify both in Search Console.
+  SITEMAP_URL: Joi.string().optional().allow(''),
 
   // Google OAuth — sign-in is disabled unless both are set
   GOOGLE_CLIENT_ID: Joi.string().optional().allow(''),

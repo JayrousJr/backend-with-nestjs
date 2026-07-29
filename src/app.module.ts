@@ -44,6 +44,8 @@ import { EventsModule } from './events/events.module';
 import { VisitorsModule } from './visitors/visitors.module';
 import { RetentionModule } from './retention/retention.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ContentModule } from './content/content.module';
+import { SeoModule } from './seo/seo.module';
 import { LocaleResolver } from '@common/resolvers/locale.resolver';
 import { I18nSuccessInterceptor } from '@common/interceptors/i18n-success.interceptor';
 
@@ -127,6 +129,8 @@ import { I18nSuccessInterceptor } from '@common/interceptors/i18n-success.interc
     VisitorsModule,
     RetentionModule,
     NotificationsModule,
+    ContentModule,
+    SeoModule,
   ],
   controllers: [AppController],
   providers: [

@@ -59,6 +59,13 @@ export class AppConfigService {
     };
   }
 
+  get sitemapUrl(): string {
+    return (
+      this.config.get<string>('SITEMAP_URL') ||
+      `${this.frontendUrl.replace(/\/$/, '')}/sitemap.xml`
+    );
+  }
+
   get googleOauth() {
     const clientId = this.config.get<string>('GOOGLE_CLIENT_ID') || undefined;
     const clientSecret =

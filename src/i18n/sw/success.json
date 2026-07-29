@@ -21,5 +21,10 @@
     "unsubscribe_message": "Umejiondoa katika jarida letu"
   },
   "NOTIFICATION_READ": "Arifa imewekwa kama imesomwa",
-  "NOTIFICATION_READ_ALL": "Arifa zote zimewekwa kama zimesomwa"
+  "NOTIFICATION_READ_ALL": "Arifa zote zimewekwa kama zimesomwa",
+  "POST_CREATE": "Chapisho limeundwa kikamilifu",
+  "POST_UPDATE": "Chapisho limesasishwa kikamilifu",
+  "POST_DELETE": "Chapisho limefutwa kikamilifu",
+  "REDIRECT_CREATE": "Uelekezaji umeundwa kikamilifu",
+  "REDIRECT_DELETE": "Uelekezaji umefutwa kikamilifu"
 }

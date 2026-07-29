@@ -50,6 +50,7 @@ model User {
   sessions      Session[]
   pageViews     PageView[]
   notifications Notification[]
+  posts         Post[]
 
   createdById Int? @map("created_by_id")
   updatedById Int? @map("updated_by_id")
@@ -134,6 +135,85 @@ model Permission {
   deletedAt DateTime? @map("deleted_at")
 
   @@map("permissions")
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// Indexable public content — the only records this app exposes to search
+/// engines. Everything else lives behind auth and is explicitly noindex.
+model Post {
+  id       Int    @id @default(autoincrement())
+  uniqueId String @unique @default(uuid(7)) @map("unique_id")
+
+  /// URL segment, unique per locale (/blog/<slug>).
+  slug     String
+  title    String
+  excerpt  String?    @db.Text
+  bodyHtml String     @map("body_html") @db.Text
+  status   PostStatus @default(DRAFT)
+
+  /// Locale of this version. Translations of the same article share a
+  /// translationKey so hreflang alternates can be emitted for the group.
+  locale         String  @default("en")
+  translationKey String  @default(uuid(7)) @map("translation_key")
+
+  publishedAt DateTime? @map("published_at")
+
+  /// SEO overrides — fall back to title/excerpt when null.
+  metaTitle       String? @map("meta_title")
+  metaDescription String? @map("meta_description") @db.Text
+  canonicalUrl    String? @map("canonical_url")
+  /// Keep the page out of search results without unpublishing it.
+  noIndex         Boolean @default(false) @map("no_index")
+
+  coverImageId Int?  @map("cover_image_id")
+  coverImage   File? @relation(fields: [coverImageId], references: [id], onDelete: SetNull)
+
+  authorId Int?  @map("author_id")
+  author   User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@unique([slug, locale])
+  @@index([status, publishedAt])
+  @@index([translationKey])
+  @@map("posts")
+}
+
+/// 301/302 map so changing a slug never costs the accumulated ranking of the
+/// old URL. Resolved by the SPA's not-found route via GET /seo/resolve.
+model Redirect {
+  id       Int    @id @default(autoincrement())
+  uniqueId String @unique @default(uuid(7)) @map("unique_id")
+
+  fromPath   String @unique @map("from_path")
+  toPath     String @map("to_path")
+  statusCode Int    @default(301) @map("status_code")
+  hitCount   Int    @default(0) @map("hit_count")
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("redirects")
 }
 
 enum NotificationType {
@@ -262,6 +342,8 @@ model CampaignRecipient {
 }
 
 model File {
+  posts Post[]
+
   id       Int    @id @default(autoincrement())
   uniqueId String @unique @default(uuid(7)) @map("unique_id")
 

@@ -27,5 +27,6 @@
   "already_unsubscribed": "You have already unsubscribed to our newsletter",
   "unsupported_file_type": "Unsupported file type",
   "invalid_path": "Invalid file path",
-  "file_required": "A file is required"
+  "file_required": "A file is required",
+  "invalid_slug": "Invalid slug"
 }

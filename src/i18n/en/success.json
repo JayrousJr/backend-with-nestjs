@@ -21,5 +21,10 @@
     "unsubscribe_message": "You've been unsubscribed"
   },
   "NOTIFICATION_READ": "Notification marked as read",
-  "NOTIFICATION_READ_ALL": "All notifications marked as read"
+  "NOTIFICATION_READ_ALL": "All notifications marked as read",
+  "POST_CREATE": "Post created successfully",
+  "POST_UPDATE": "Post updated successfully",
+  "POST_DELETE": "Post deleted successfully",
+  "REDIRECT_CREATE": "Redirect created successfully",
+  "REDIRECT_DELETE": "Redirect deleted successfully"
 }

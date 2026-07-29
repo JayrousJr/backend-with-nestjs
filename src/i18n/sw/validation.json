@@ -19,5 +19,6 @@
   "matches": "Muundo wa {property} si sahihi.",
   "isDefined": "{property} inahitajika.",
   "isOptional": "{property} ni ya hiari.",
-  "failed": "Uthibitishaji wa taarifa umeshindwa."
+  "failed": "Uthibitishaji wa taarifa umeshindwa.",
+  "isPath": "$property lazima ianze na /"
 }
