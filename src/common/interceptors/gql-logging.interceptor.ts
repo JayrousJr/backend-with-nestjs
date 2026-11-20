@@ -31,7 +31,7 @@ export class GqlLoggingInterceptor implements NestInterceptor {
       tap(() => {
         const duration = Date.now() - start;
         const user = RequestContext.getUser();
-        const actor = user ? `${user.email} [${user.role}]` : 'anonymous';
+        const actor = user ? `${user.email} [#${user.id}]` : 'anonymous';
 
         if (operation === 'mutation') {
           this.logger.log(`${field} — ${actor} — ${duration}ms`);

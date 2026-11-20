@@ -1,26 +1,25 @@
 {
-  "verification": {
-    "subject": "Verify your email address",
-    "greeting": "Hi {firstName},",
-    "body": "Please verify your email address by clicking the link below.",
-    "cta": "Verify Email Address",
-    "expiry": "This link expires in 7 days. If you do not verify your account within that time, it will be automatically deleted.",
-    "ignore": "If you did not create an account, you can safely ignore this email."
-  },
   "password_reset": {
     "subject": "Reset your password",
     "greeting": "Hi {firstName},",
     "body": "We received a request to reset your password. Click the link below to choose a new one.",
     "cta": "Reset Password",
-    "expiry": "This link expires in 1 hour.",
+    "expiry": "This link can be used once and expires in {minutes} minutes.",
     "ignore": "If you did not request a password reset, you can safely ignore this email. Your password will not be changed."
   },
-  "newsletter": {
-    "subscribe_subject": "You're subscribed to our newsletter",
-    "subscribe_greeting": "Hi {firstName},",
-    "subscribe_body": "You have been successfully subscribed to our newsletter. You will now receive updates and news from us.",
-    "unsubscribe_subject": "You've been unsubscribed",
-    "unsubscribe_greeting": "Hi {firstName},",
-    "unsubscribe_body": "You have been successfully unsubscribed from our newsletter. You will no longer receive updates from us."
+  "activation": {
+    "subject": "Activate your AzamTV account",
+    "greeting": "Hi {firstName},",
+    "body": "An account has been created for you in the AzamTV management system. Click the link below to set your password and activate it.",
+    "cta": "Activate account",
+    "expiry": "This link can be used once and expires in {hours} hours.",
+    "ignore": "If you were not expecting this, contact ICT."
+  },
+  "two_factor": {
+    "subject": "Your AzamTV login code",
+    "greeting": "Hi {firstName},",
+    "body": "Use this code to finish signing in:",
+    "expiry": "The code expires in {minutes} minutes and can be used once.",
+    "ignore": "If you did not try to sign in, change your password and tell ICT."
   }
 }

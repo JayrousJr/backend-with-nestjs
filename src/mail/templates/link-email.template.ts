@@ -1,5 +1,5 @@
-export interface PasswordResetEmailData {
-  resetUrl: string;
+export interface LinkEmailData {
+  url: string;
   greeting: string;
   body: string;
   cta: string;
@@ -12,29 +12,26 @@ export interface RenderedEmail {
   text: string;
 }
 
-export function passwordResetEmailTemplate({
-  resetUrl,
-  greeting,
-  body,
-  cta,
-  expiry,
-  ignore,
-}: PasswordResetEmailData): RenderedEmail {
-  const text = `${greeting}
+const escape = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-${body}
-${resetUrl}
+/** Single call-to-action email (activation, password reset). */
+export function linkEmailTemplate(d: LinkEmailData): RenderedEmail {
+  const text = `${d.greeting}
 
-${expiry}
+${d.body}
+${d.url}
 
-${ignore}`;
+${d.expiry}
+
+${d.ignore}`;
 
   const html = `
-    <p>${greeting}</p>
-    <p>${body}</p>
-    <p><a href="${resetUrl}">${cta}</a></p>
-    <p>${expiry}</p>
-    <p style="color:#888">${ignore}</p>
+    <p>${escape(d.greeting)}</p>
+    <p>${escape(d.body)}</p>
+    <p><a href="${escape(d.url)}">${escape(d.cta)}</a></p>
+    <p>${escape(d.expiry)}</p>
+    <p style="color:#888">${escape(d.ignore)}</p>
   `;
 
   return { html, text };

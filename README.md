@@ -1,3 +1,66 @@
+# AzamTV Management — Backend
+
+NestJS + GraphQL + Prisma (PostgreSQL). Specifications live in `../docs/`.
+Implemented: **A1 — User & Employee Management** (`docs/user-employee-spec.md`):
+departments (HOD, deputy, acting HOD), job titles, employment types, employees
+with history, Excel import, users created from employees (through the
+`user.creation` approval point), TOTP two-factor with email fallback,
+the permission catalogue with scopes, roles/grants, groups, delegation,
+`can()` access checks, SoD rules, security settings, the shared **workflow
+engine** (approval points with versioned chains), exit clearance, A1 Excel
+reports and the append-only audit log.
+
+Also implemented (build step 2): **Product Repository** (`docs/tender-module-spec.md` §5 —
+categories with receiving-criteria library, products owned by departments,
+versions, `product.activation` with Procurement's activation fields, duplicate
+search and merge, Excel import) and **Store basics** (`docs/store-inventory-spec.md` —
+stores and locations, stock levels, asset tags with QR, the asset register incl.
+kits and vehicles, an append-only stock ledger, stock adjustments through
+`stock_adjustment.approval`, the opening-balance / tagging-campaign import, and
+B2 reports).
+
+## Quick start (local)
+
+```bash
+cp .env.example .env            # set JWT + TWO_FACTOR_ENCRYPTION_KEY secrets; POSTGRES_PORT/REDIS_PORT if 5432/6379 are taken
+docker compose -p azamtv up -d  # postgres + redis (host ports from .env)
+pnpm install
+pnpm db:migrate                 # applies prisma/migrations
+pnpm db:seed                    # catalogue, policies, seeded roles & groups (+ demo data outside production)
+pnpm start:dev                  # http://localhost:3005/api/graphql
+```
+
+Demo users (development only, password `Dev-Passw0rd-2026`):
+`sysadmin@`, `ict.admin2@`, `hr@`, `hod.camera@`, `camera.op@`, `procurement@`,
+`storekeeper@` (Main Store), `store.studio@` (Studio Store), `store.manager@` — all `@azamtv.co.tz`.
+Demo stores: Main Store and Studio Store.
+
+**Production first administrator:** `ADMIN_EMAIL=… ADMIN_EMPLOYEE_NUMBER=… ADMIN_FIRST_NAME=… ADMIN_LAST_NAME=… pnpm setup:admin`
+(prints a one-time password; create a second administrator afterwards — two holders of `role.manage` are required).
+
+## Where things are
+
+| Path                                                                                               | What                                                                                                                                      |
+| -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/access/catalogue/`                                                                            | Permission catalogue — each module registers its permissions here; synced at boot                                                         |
+| `src/access/access.service.ts`                                                                     | `can()`, `assert()`, `scopeWhere()` — scopes are matched per record / in the DB query                                                     |
+| `src/access/access-integrity.service.ts`                                                           | §6.7 escalation rules (grant only what you hold, never to yourself, ≥2 role managers, no admin + procurement)                             |
+| `src/policy/policy.catalogue.ts`                                                                   | SoD rules and security settings (go-live values), editable in the UI                                                                      |
+| `src/audit/`                                                                                       | Append-only audit log (DB trigger blocks UPDATE/DELETE)                                                                                   |
+| `src/workflow/point-catalogue.ts`                                                                  | Approval points registered in code (seeded chains); `WorkflowService.start()` / `APPROVAL_COMPLETED` event for modules                    |
+| `src/imports/`                                                                                     | Shared Excel import pipeline (employee import; `excel.ts` helpers for the other imports)                                                  |
+| `src/products/`                                                                                    | B1 §5 Product Repository (+ `/imports/products`)                                                                                          |
+| `src/store/`                                                                                       | B2 stores, ledger (`ledger.service.ts` — the only place stock changes), assets, adjustments, opening balance (`/imports/opening-balance`) |
+| `src/numbering/`                                                                                   | Document numbers (ADJ-YYYY-####, tag series)                                                                                              |
+| `src/reports/`                                                                                     | Excel reports, each gated by a permission and audited                                                                                     |
+| `src/org/`, `src/employees/`, `src/users/`, `src/auth/`, `src/delegations/`, `src/exit-clearance/` | A1 domain                                                                                                                                 |
+
+Rules: no role-name checks anywhere (`@RequirePermission('code')` + service-level scope checks), nothing is hard-deleted, every change is audited.
+
+---
+
+_The sections below come from the original template; parts about registration, Google sign-in, newsletter, campaigns, content/SEO, visitor analytics and data retention no longer apply._
+
 # NestJS GraphQL Template
 
 <p align="center">

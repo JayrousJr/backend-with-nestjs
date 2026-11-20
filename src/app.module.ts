@@ -34,18 +34,23 @@ import {
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
 import { UsersModule } from './users/users.module';
-import { RolesModule } from './roles/roles.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
-import { PermissionsModule, PermissionsGuard } from '@permissions';
-import { NewsletterModule } from './newsletter/newsletter.module';
-import { CampaignsModule } from './campaigns/campaigns.module';
+import { AccessModule, PermissionsGuard } from '@access';
+import { AuditModule } from './audit/audit.module';
+import { PolicyModule } from './policy/policy.module';
+import { OrgModule } from './org/org.module';
+import { EmployeesModule } from './employees/employees.module';
+import { DelegationsModule } from './delegations/delegations.module';
+import { ImportsModule } from './imports/imports.module';
+import { WorkflowModule } from './workflow/workflow.module';
+import { ExitClearanceModule } from './exit-clearance/exit-clearance.module';
+import { ReportsModule } from './reports/reports.module';
+import { NumberingModule } from './numbering/numbering.module';
+import { ProductsModule } from './products/products.module';
+import { StoreModule } from './store/store.module';
 import { StorageModule } from './storage/storage.module';
 import { EventsModule } from './events/events.module';
-import { VisitorsModule } from './visitors/visitors.module';
-import { RetentionModule } from './retention/retention.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { ContentModule } from './content/content.module';
-import { SeoModule } from './seo/seo.module';
 import { LocaleResolver } from '@common/resolvers/locale.resolver';
 import { I18nSuccessInterceptor } from '@common/interceptors/i18n-success.interceptor';
 
@@ -117,20 +122,25 @@ import { I18nSuccessInterceptor } from '@common/interceptors/i18n-success.interc
     EventEmitterModule.forRoot(),
 
     PrismaModule,
-    PermissionsModule,
+    AuditModule,
+    PolicyModule,
+    AccessModule,
+    WorkflowModule,
     AuthModule,
+    OrgModule,
+    EmployeesModule,
+    DelegationsModule,
+    ImportsModule,
+    ExitClearanceModule,
+    NumberingModule,
+    ProductsModule,
+    StoreModule,
+    ReportsModule,
     UsersModule,
-    RolesModule,
     HealthModule,
-    NewsletterModule,
-    CampaignsModule,
     StorageModule,
     EventsModule,
-    VisitorsModule,
-    RetentionModule,
     NotificationsModule,
-    ContentModule,
-    SeoModule,
   ],
   controllers: [AppController],
   providers: [

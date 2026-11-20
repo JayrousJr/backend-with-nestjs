@@ -13,14 +13,23 @@ const BCRYPT_HASH_PATTERN = /^\$2[aby]\$/;
  * prisma/schema.prisma (models extending the audit fields).
  */
 const AUDITED_MODELS = new Set([
+  'Department',
+  'ActingAssignment',
+  'JobTitle',
+  'EmploymentType',
+  'Employee',
+  'DriverProfile',
   'User',
   'Session',
   'Role',
-  'Permission',
-  'NewsletterSubscriber',
-  'Campaign',
-  'CampaignRecipient',
+  'UserGroup',
+  'Delegation',
+  'Notification',
   'File',
+  'ProductCategory',
+  'Product',
+  'Store',
+  'Asset',
 ]);
 
 async function hashPasswordField(data: unknown): Promise<void> {

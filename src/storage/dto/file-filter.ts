@@ -57,5 +57,5 @@ export function buildFileOrderBy(
 ): Prisma.FileOrderByWithRelationInput {
   if (!orderBy) return { createdAt: 'desc' };
   const direction = orderBy.direction === OrderDirection.ASC ? 'asc' : 'desc';
-  return { [orderBy.field]: direction } as Prisma.FileOrderByWithRelationInput;
+  return { [orderBy.field]: direction };
 }

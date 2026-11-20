@@ -5,18 +5,9 @@ import { Resend } from 'resend';
 import * as nodemailer from 'nodemailer';
 import { I18nService } from 'nestjs-i18n';
 import { AppConfigService } from '@config';
-import { PrismaService } from '@prisma';
 import { MAIL_QUEUE } from './mail.constants';
-import {
-  CampaignEmailJob,
-  NewsletterConfirmationJob,
-  PasswordResetEmailJob,
-  VerificationEmailJob,
-} from './mail.service';
-import { verificationEmailTemplate } from './templates/verification-email.template';
-import { passwordResetEmailTemplate } from './templates/password-reset-email.template';
-import { campaignEmailTemplate } from './templates/campaign-email.template';
-import { newsletterConfirmationTemplate } from './templates/newsletter-confirmation.template';
+import { CodeEmailJob, LinkEmailJob } from './mail.service';
+import { linkEmailTemplate } from './templates/link-email.template';
 
 interface MailPayload {
   to: string;
@@ -33,7 +24,6 @@ export class MailProcessor extends WorkerHost {
   constructor(
     private readonly config: AppConfigService,
     private readonly i18n: I18nService,
-    private readonly prisma: PrismaService,
   ) {
     super();
 
@@ -81,47 +71,35 @@ export class MailProcessor extends WorkerHost {
     return this.i18n.translate(key, { lang, args });
   }
 
-  async process(
-    job: Job<
-      | VerificationEmailJob
-      | PasswordResetEmailJob
-      | CampaignEmailJob
-      | NewsletterConfirmationJob
-    >,
-  ): Promise<void> {
-    if (job.name === 'campaign-email') {
-      return this.processCampaignEmail(job as Job<CampaignEmailJob>);
+  async process(job: Job<LinkEmailJob | CodeEmailJob>): Promise<void> {
+    if (job.name === 'two-factor-code') {
+      return this.processCode(job as Job<CodeEmailJob>);
     }
-
-    if (job.name === 'newsletter-confirmation') {
-      return this.processNewsletterConfirmation(
-        job as Job<NewsletterConfirmationJob>,
-      );
-    }
-
-    const { email, firstName, token, locale } =
-      job.data as VerificationEmailJob;
+    const { email, firstName, token, locale, validFor } =
+      job.data as LinkEmailJob;
     const lang = locale || 'en';
     let subject: string, html: string, text: string;
 
-    if (job.name === 'verification-email') {
-      subject = this.t('mail.verification.subject', lang);
-      ({ html, text } = verificationEmailTemplate({
-        verificationUrl: `${this.config.appUrl}/auth/verify-email?token=${token}`,
-        greeting: this.t('mail.verification.greeting', lang, { firstName }),
-        body: this.t('mail.verification.body', lang),
-        cta: this.t('mail.verification.cta', lang),
-        expiry: this.t('mail.verification.expiry', lang),
-        ignore: this.t('mail.verification.ignore', lang),
+    if (job.name === 'activation-email') {
+      subject = this.t('mail.activation.subject', lang);
+      ({ html, text } = linkEmailTemplate({
+        url: `${this.config.frontendUrl}/auth/activate?token=${token}`,
+        greeting: this.t('mail.activation.greeting', lang, { firstName }),
+        body: this.t('mail.activation.body', lang),
+        cta: this.t('mail.activation.cta', lang),
+        expiry: this.t('mail.activation.expiry', lang, { hours: validFor }),
+        ignore: this.t('mail.activation.ignore', lang),
       }));
     } else if (job.name === 'password-reset-email') {
       subject = this.t('mail.password_reset.subject', lang);
-      ({ html, text } = passwordResetEmailTemplate({
-        resetUrl: `${this.config.frontendUrl}/auth/reset-password?token=${token}`,
+      ({ html, text } = linkEmailTemplate({
+        url: `${this.config.frontendUrl}/auth/reset-password?token=${token}`,
         greeting: this.t('mail.password_reset.greeting', lang, { firstName }),
         body: this.t('mail.password_reset.body', lang),
         cta: this.t('mail.password_reset.cta', lang),
-        expiry: this.t('mail.password_reset.expiry', lang),
+        expiry: this.t('mail.password_reset.expiry', lang, {
+          minutes: validFor,
+        }),
         ignore: this.t('mail.password_reset.ignore', lang),
       }));
     } else {
@@ -132,50 +110,24 @@ export class MailProcessor extends WorkerHost {
     this.logger.log(`Sent ${job.name} to ${email} [${lang}]`);
   }
 
-  private async processCampaignEmail(
-    job: Job<CampaignEmailJob>,
-  ): Promise<void> {
-    const { email, subject, bodyHtml, bodyText, campaignRecipientId } =
-      job.data;
-
-    try {
-      const { html, text } = campaignEmailTemplate({ bodyHtml, bodyText });
-      await this.sendMail({ to: email, subject, html, text });
-
-      await this.prisma.db.campaignRecipient.update({
-        where: { id: campaignRecipientId },
-        data: { status: 'SENT', sentAt: new Date() },
-      });
-
-      this.logger.log(`Sent campaign email to ${email}`);
-    } catch (error) {
-      await this.prisma.db.campaignRecipient.update({
-        where: { id: campaignRecipientId },
-        data: {
-          status: 'FAILED',
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      throw error;
-    }
-  }
-
-  private async processNewsletterConfirmation(
-    job: Job<NewsletterConfirmationJob>,
-  ): Promise<void> {
-    const { email, firstName, locale, type } = job.data;
+  private async processCode(job: Job<CodeEmailJob>): Promise<void> {
+    const { email, firstName, code, locale, validFor } = job.data;
     const lang = locale || 'en';
-
-    const subject = this.t(`mail.newsletter.${type}_subject`, lang);
-    const { html, text } = newsletterConfirmationTemplate({
-      greeting: this.t(`mail.newsletter.${type}_greeting`, lang, { firstName }),
-      body: this.t(`mail.newsletter.${type}_body`, lang),
+    const greeting = this.t('mail.two_factor.greeting', lang, { firstName });
+    const body = this.t('mail.two_factor.body', lang);
+    const expiry = this.t('mail.two_factor.expiry', lang, {
+      minutes: validFor,
     });
-
-    await this.sendMail({ to: email, subject, html, text });
-    this.logger.log(
-      `Sent newsletter ${type} confirmation to ${email} [${lang}]`,
-    );
+    const ignore = this.t('mail.two_factor.ignore', lang);
+    const text = `${greeting}\n\n${body}\n\n${code}\n\n${expiry}\n\n${ignore}`;
+    const html = `<p>${greeting}</p><p>${body}</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px">${code}</p><p>${expiry}</p><p style="color:#888">${ignore}</p>`;
+    await this.sendMail({
+      to: email,
+      subject: this.t('mail.two_factor.subject', lang),
+      html,
+      text,
+    });
+    this.logger.log(`Sent ${job.name} to ${email} [${lang}]`);
   }
 
   @OnWorkerEvent('failed')

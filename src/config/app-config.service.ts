@@ -45,6 +45,10 @@ export class AppConfigService {
     };
   }
 
+  get twoFactorKey(): string {
+    return this.config.getOrThrow<string>('TWO_FACTOR_ENCRYPTION_KEY');
+  }
+
   get jwtAccess() {
     return {
       secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
@@ -149,8 +153,7 @@ export class AppConfigService {
       passkey: this.config.get<string>('MPESA_PASSKEY', ''),
       callbackUrl: this.config.get<string>('MPESA_CALLBACK_URL', ''),
       env: this.config.get<string>('MPESA_ENV', 'sandbox') as
-        | 'sandbox'
-        | 'production',
+        'sandbox' | 'production',
     };
   }
 
@@ -186,8 +189,7 @@ export class AppConfigService {
   get storage() {
     return {
       driver: this.config.get<string>('STORAGE_DRIVER', 'local') as
-        | 'local'
-        | 's3',
+        'local' | 's3',
       region: this.config.get<string>('AWS_REGION', ''),
       accessKeyId: this.config.get<string>('AWS_ACCESS_KEY_ID', ''),
       secretAccessKey: this.config.get<string>('AWS_SECRET_ACCESS_KEY', ''),

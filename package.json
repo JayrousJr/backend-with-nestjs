@@ -27,7 +27,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.json",
     "prepare": "husky",
-    "build:prod": "nest build --webpackPath webpack.prod.config.js"
+    "build:prod": "nest build --webpackPath webpack.prod.config.js",
+    "setup:admin": "ts-node -r tsconfig-paths/register prisma/setup-admin.ts"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",
@@ -64,6 +65,7 @@
     "cookie-parser": "^1.4.7",
     "csrf-csrf": "^4.0.3",
     "dotenv": "^17.4.1",
+    "exceljs": "4.4.0",
     "express-session": "^1.19.0",
     "graphql": "^16.14.2",
     "graphql-subscriptions": "^3.0.0",
@@ -148,8 +150,8 @@
       "^@common$": "<rootDir>/common/index.ts",
       "^@common/(.*)$": "<rootDir>/common/$1",
       "^@prisma$": "<rootDir>/prisma/index.ts",
-      "^@permissions$": "<rootDir>/permissions/index.ts",
-      "^@permissions/(.*)$": "<rootDir>/permissions/$1",
+      "^@access$": "<rootDir>/access/index.ts",
+      "^@access/(.*)$": "<rootDir>/access/$1",
       "^@db$": "<rootDir>/../generated/prisma/client.ts",
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },

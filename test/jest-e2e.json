@@ -12,8 +12,8 @@
     "^@common$": "<rootDir>/../src/common/index.ts",
     "^@common/(.*)$": "<rootDir>/../src/common/$1",
     "^@prisma$": "<rootDir>/../src/prisma/index.ts",
-    "^@permissions$": "<rootDir>/../src/permissions/index.ts",
-    "^@permissions/(.*)$": "<rootDir>/../src/permissions/$1",
+    "^@access$": "<rootDir>/../src/access/index.ts",
+    "^@access/(.*)$": "<rootDir>/../src/access/$1",
     "^@db$": "<rootDir>/../generated/prisma/client.ts",
     "^(\\.{1,2}/.*)\\.js$": "$1"
   }

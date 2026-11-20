@@ -1,5 +1,5 @@
 import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
-import { PERMISSIONS, RequirePermission } from '@permissions';
+import { RequirePermission } from '@access';
 import { PaginationInput } from '@common';
 import { StorageService } from './storage.service';
 import { FileEntity } from './entities/file.entity';
@@ -10,7 +10,7 @@ import { FileFilterInput, FileOrderInput } from './dto/file-filter';
 export class StorageResolver {
   constructor(private readonly storageService: StorageService) {}
 
-  @RequirePermission(PERMISSIONS.FILES.READ)
+  @RequirePermission('file.view')
   @Query(() => FileListResponse, { name: 'getFiles' })
   getFiles(
     @Args('pagination', { type: () => PaginationInput, nullable: true })
@@ -23,13 +23,13 @@ export class StorageResolver {
     return this.storageService.getFiles(filter, orderBy, pagination);
   }
 
-  @RequirePermission(PERMISSIONS.FILES.READ)
+  @RequirePermission('file.view')
   @Query(() => FileEntity, { name: 'getFile' })
   getFile(@Args('uniqueId', { type: () => String }) uniqueId: string) {
     return this.storageService.getFile(uniqueId);
   }
 
-  @RequirePermission(PERMISSIONS.FILES.DELETE)
+  @RequirePermission('file.delete')
   @Mutation(() => Boolean)
   async deleteFile(
     @Args('uniqueId', { type: () => String }) uniqueId: string,

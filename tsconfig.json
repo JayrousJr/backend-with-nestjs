@@ -20,8 +20,8 @@
       "@common": ["src/common/index.ts"],
       "@common/*": ["src/common/*"],
       "@prisma": ["src/prisma/index.ts"],
-      "@permissions": ["src/permissions/index.ts"],
-      "@permissions/*": ["src/permissions/*"],
+      "@access": ["src/access/index.ts"],
+      "@access/*": ["src/access/*"],
       "@db": ["generated/prisma/client.ts"]
     },
     "incremental": true,

@@ -27,6 +27,9 @@ export const envValidationSchema = Joi.object({
   JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
   JWT_REFRESH_SECRET: Joi.string().min(32).required(),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
+  // 32+ chars; encrypts TOTP secrets at rest. Changing it invalidates every
+  // enrolled authenticator (users must enrol again).
+  TWO_FACTOR_ENCRYPTION_KEY: Joi.string().min(32).required(),
 
   CORS_ORIGINS: Joi.string().default('http://localhost:3005'),
   // Where OAuth callbacks land the user back in the SPA

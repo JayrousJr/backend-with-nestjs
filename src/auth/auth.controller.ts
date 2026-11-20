@@ -5,215 +5,78 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  NotFoundException,
   Param,
-  UnauthorizedException,
   Post,
-  Query,
   Req,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { randomBytes } from 'node:crypto';
-import ms from 'ms';
 import type { CookieOptions, Request, Response } from 'express';
-import { AppConfigService } from '@config';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { AppConfigService } from '@config';
 import { AuthUser, Public } from '@common';
-import type { CurrentUser as CurrentUserData } from '@common';
-import { AuthService } from './auth.service';
+import type { CurrentUser } from '@common';
+import { AuthService, AuthTokens } from './auth.service';
 import type { SessionMetadata } from './auth.service';
-import { GoogleOauthService } from './google-oauth.service';
-import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
-import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
-import { ResendVerificationDto } from './dto/resend-verification.dto';
-import { ChangePasswordDto } from './dto/change-password.dto';
+import { ChangePasswordDto, TokenPasswordDto } from './dto/password.dto';
+import {
+  ChallengeCodeDto,
+  ChallengeDto,
+  DisableTwoFactorDto,
+  TwoFactorCodeDto,
+} from './dto/two-factor.dto';
+import { TwoFactorService } from './two-factor.service';
 
 const REFRESH_COOKIE = 'refresh_token';
 
-function sessionMetadata(req: Request): SessionMetadata {
-  return {
-    userAgent: req.headers['user-agent'],
-    ipAddress: req.ip,
-  };
+function meta(req: Request): SessionMetadata {
+  return { userAgent: req.headers['user-agent'], ipAddress: req.ip };
 }
 
+/**
+ * Staff authentication (A1 §7). No self-registration: users are created
+ * from employees and activate through an emailed link.
+ */
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(
-    private readonly authService: AuthService,
-    private readonly googleOauth: GoogleOauthService,
+    private readonly auth: AuthService,
     private readonly config: AppConfigService,
+    private readonly twoFactor: TwoFactorService,
   ) {}
 
-  /**
-   * The refresh token lives in an HttpOnly cookie so JavaScript — and any XSS
-   * on the frontend — cannot read it. SameSite also makes it unusable in a
-   * cross-site request, which is what stands in for CSRF protection on the
-   * refresh/logout routes.
-   */
-  private refreshCookieOptions(): CookieOptions {
+  /** Refresh token lives in an HttpOnly, SameSite cookie scoped to /auth. */
+  private cookieOptions(expires?: Date): CookieOptions {
     return {
       httpOnly: true,
       secure: this.config.isProduction,
       sameSite: this.config.cookieSameSite,
       path: `/${this.config.apiPrefix}/auth`,
-      maxAge: ms(this.config.jwtRefresh.expiresIn as ms.StringValue),
+      ...(expires && { expires }),
     };
   }
 
-  /** Sets the refresh cookie and returns only the access token to the client. */
-  private issueTokens(
-    res: Response,
-    tokens: { accessToken: string; refreshToken: string },
-  ) {
+  private issue(res: Response, tokens: AuthTokens) {
     res.cookie(
       REFRESH_COOKIE,
       tokens.refreshToken,
-      this.refreshCookieOptions(),
+      this.cookieOptions(tokens.refreshExpiresAt),
     );
     return { accessToken: tokens.accessToken };
   }
 
-  /** Cookie first (browsers); body is the fallback for non-browser clients. */
-  private readRefreshToken(req: Request, dto?: RefreshDto): string | undefined {
+  private readRefresh(req: Request, dto?: RefreshDto) {
     const cookies = req.cookies as Record<string, string> | undefined;
     return cookies?.[REFRESH_COOKIE] ?? dto?.refreshToken;
   }
 
   @Public()
-  @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
-  }
-
-  /**
-   * Google OAuth — start. Sets a short-lived state cookie (CSRF) and sends
-   * the browser to Google's consent screen. 404s when the feature is
-   * unconfigured so it's invisible unless GOOGLE_CLIENT_ID/SECRET are set.
-   */
-  @Public()
-  @Get('google')
-  googleStart(@Res() res: Response) {
-    if (!this.googleOauth.enabled) throw new NotFoundException();
-    const state = randomBytes(16).toString('hex');
-    res.cookie('oauth_state', state, {
-      httpOnly: true,
-      sameSite: 'lax',
-      maxAge: 10 * 60_000,
-    });
-    res.redirect(this.googleOauth.buildAuthUrl(state));
-  }
-
-  /**
-   * Google OAuth — callback. Exchanges the code, signs the user in (creating
-   * the account on first login), then hands tokens to the SPA in the URL
-   * fragment — fragments never reach server logs or Referer headers.
-   */
-  @Public()
-  @Get('google/callback')
-  async googleCallback(
-    @Req() req: Request,
-    @Res() res: Response,
-    @Query('code') code?: string,
-    @Query('state') state?: string,
-    @Query('error') error?: string,
-  ) {
-    if (!this.googleOauth.enabled) throw new NotFoundException();
-    const callbackUrl = `${this.config.frontendUrl}/auth/callback`;
-
-    const cookieState = (req.cookies as Record<string, string> | undefined)
-      ?.oauth_state;
-    res.clearCookie('oauth_state');
-
-    if (error || !code || !state || state !== cookieState) {
-      return res.redirect(`${callbackUrl}#error=oauth_failed`);
-    }
-
-    try {
-      const profile = await this.googleOauth.exchangeCode(code);
-      const tokens = await this.authService.oauthLogin(
-        profile,
-        sessionMetadata(req),
-      );
-      res.cookie(
-        REFRESH_COOKIE,
-        tokens.refreshToken,
-        this.refreshCookieOptions(),
-      );
-      // Only the short-lived access token travels in the URL fragment.
-      const fragment = new URLSearchParams({
-        accessToken: tokens.accessToken,
-      });
-      return res.redirect(`${callbackUrl}#${fragment.toString()}`);
-    } catch {
-      return res.redirect(`${callbackUrl}#error=oauth_failed`);
-    }
-  }
-
-  @Public()
-  @Post('verify-email')
-  @HttpCode(HttpStatus.OK)
-  verifyEmail(@Body() dto: VerifyEmailDto) {
-    return this.authService.verifyEmail(dto.token);
-  }
-
-  @Public()
-  @Post('resend-verification')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  resendVerification(@Body() dto: ResendVerificationDto) {
-    return this.authService.resendVerification(dto.email);
-  }
-
-  @Public()
-  @Post('forgot-password')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto.email);
-  }
-
-  @Public()
-  @Post('reset-password')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto.token, dto.password);
-  }
-
-  @Post('change-password')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiBearerAuth()
-  changePassword(
-    @AuthUser() user: CurrentUserData,
-    @Body() dto: ChangePasswordDto,
-  ) {
-    return this.authService.changePassword(
-      user.uniqueId,
-      dto.currentPassword,
-      dto.newPassword,
-    );
-  }
-
-  @Get('sessions')
-  @ApiBearerAuth()
-  getSessions(@AuthUser() user: CurrentUserData) {
-    return this.authService.getSessions(user.id);
-  }
-
-  @Delete('sessions/:uniqueId')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiBearerAuth()
-  revokeSession(
-    @AuthUser() user: CurrentUserData,
-    @Param('uniqueId') uniqueId: string,
-  ) {
-    return this.authService.revokeSession(user.id, uniqueId);
-  }
-
-  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -221,8 +84,93 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const tokens = await this.authService.login(dto, sessionMetadata(req));
-    return this.issueTokens(res, tokens);
+    const result = await this.auth.login(dto, meta(req));
+    // With 2FA the password step returns a challenge, never a session.
+    if (result.challenge) return { twoFactor: result.challenge };
+    return this.issue(res, result.tokens);
+  }
+
+  // ── two-factor ───────────────────────────────────────────────────────────
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('2fa/verify')
+  @HttpCode(HttpStatus.OK)
+  async verifyTwoFactor(
+    @Body() dto: ChallengeCodeDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.issue(
+      res,
+      await this.auth.verifyTwoFactor(dto.challengeToken, dto.code, meta(req)),
+    );
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Post('2fa/email-code')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  sendTwoFactorEmail(@Body() dto: ChallengeDto, @Req() req: Request) {
+    return this.auth.sendTwoFactorEmail(dto.challengeToken, meta(req));
+  }
+
+  /** Enrolment during login (a role requires 2FA). */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('2fa/challenge-setup')
+  @HttpCode(HttpStatus.OK)
+  challengeSetup(@Body() dto: ChallengeDto) {
+    return this.auth.challengeSetup(dto.challengeToken);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('2fa/challenge-enable')
+  @HttpCode(HttpStatus.OK)
+  async challengeEnable(
+    @Body() dto: ChallengeCodeDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.issue(
+      res,
+      await this.auth.challengeEnable(dto.challengeToken, dto.code, meta(req)),
+    );
+  }
+
+  /** Signed-in user: status, voluntary enrolment, switch off. */
+  @Get('2fa')
+  @ApiBearerAuth()
+  twoFactorStatus(@AuthUser() user: CurrentUser) {
+    return this.twoFactor.status(user.id);
+  }
+
+  @Post('2fa/setup')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  twoFactorSetup(@AuthUser() user: CurrentUser) {
+    return this.twoFactor.beginSetup(user.id);
+  }
+
+  @Post('2fa/enable')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  twoFactorEnable(
+    @AuthUser() user: CurrentUser,
+    @Body() dto: TwoFactorCodeDto,
+  ) {
+    return this.twoFactor.confirmSetup(user.id, dto.code);
+  }
+
+  @Post('2fa/disable')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  twoFactorDisable(
+    @AuthUser() user: CurrentUser,
+    @Body() dto: DisableTwoFactorDto,
+  ) {
+    return this.twoFactor.disable(user, dto.password, dto.code);
   }
 
   @Public()
@@ -233,15 +181,9 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Body() dto?: RefreshDto,
   ) {
-    const refreshToken = this.readRefreshToken(req, dto);
-    if (!refreshToken) {
-      throw new UnauthorizedException('errors.invalid_refresh_token');
-    }
-    const tokens = await this.authService.refreshToken(
-      refreshToken,
-      sessionMetadata(req),
-    );
-    return this.issueTokens(res, tokens);
+    const token = this.readRefresh(req, dto);
+    if (!token) throw new UnauthorizedException('errors.invalid_refresh_token');
+    return this.issue(res, await this.auth.refresh(token, meta(req)));
   }
 
   @Public()
@@ -252,20 +194,76 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Body() dto?: RefreshDto,
   ) {
-    const refreshToken = this.readRefreshToken(req, dto);
-    if (refreshToken) await this.authService.logout(refreshToken);
-    // Logout stays idempotent — always clear the cookie.
-    res.clearCookie(REFRESH_COOKIE, { path: `/${this.config.apiPrefix}/auth` });
+    const token = this.readRefresh(req, dto);
+    if (token) await this.auth.logout(token);
+    res.clearCookie(REFRESH_COOKIE, this.cookieOptions());
   }
 
   @Post('logout-all')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
   async logoutAll(
-    @AuthUser() user: CurrentUserData,
+    @AuthUser() user: CurrentUser,
     @Res({ passthrough: true }) res: Response,
   ) {
-    await this.authService.logoutAll(user.id);
-    res.clearCookie(REFRESH_COOKIE, { path: `/${this.config.apiPrefix}/auth` });
+    await this.auth.logoutAll(user.id);
+    res.clearCookie(REFRESH_COOKIE, this.cookieOptions());
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('activate')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  activate(@Body() dto: TokenPasswordDto, @Req() req: Request) {
+    return this.auth.activate(dto.token, dto.password, meta(req));
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
+    return this.auth.forgotPassword(dto.email, meta(req));
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  resetPassword(@Body() dto: TokenPasswordDto, @Req() req: Request) {
+    return this.auth.resetPassword(dto.token, dto.password, meta(req));
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  changePassword(
+    @AuthUser() user: CurrentUser,
+    @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
+  ) {
+    return this.auth.changePassword(
+      user.uniqueId,
+      dto.currentPassword,
+      dto.newPassword,
+      user.sessionId,
+      meta(req),
+    );
+  }
+
+  @Get('sessions')
+  @ApiBearerAuth()
+  sessions(@AuthUser() user: CurrentUser) {
+    return this.auth.getSessions(user.id);
+  }
+
+  @Delete('sessions/:uniqueId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  revokeSession(
+    @AuthUser() user: CurrentUser,
+    @Param('uniqueId') uniqueId: string,
+  ) {
+    return this.auth.revokeSession(user.id, uniqueId);
   }
 }

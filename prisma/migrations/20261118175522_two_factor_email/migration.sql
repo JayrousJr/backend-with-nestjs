@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "AuthTokenType" ADD VALUE 'TWO_FACTOR_EMAIL';

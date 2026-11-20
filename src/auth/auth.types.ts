@@ -1,6 +1,7 @@
 export interface JwtPayload {
+  /** User uniqueId. */
   sub: string;
   email: string;
-  role: string;
+  /** Session uniqueId. */
   sid: string;
 }

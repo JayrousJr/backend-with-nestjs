@@ -46,7 +46,7 @@ export class NotificationsService {
         type: input.type ?? 'INFO',
         titleKey: input.titleKey,
         messageKey: input.messageKey,
-        params: input.params as Prisma.InputJsonValue | undefined,
+        params: input.params,
         link: input.link,
       });
       this.gateway.emitToUser(userId, 'notification', this.toEntity(row));

@@ -82,7 +82,7 @@ export class GqlHttpExceptionFilter implements ExceptionFilter {
 
   private log(status: number, exception: HttpException): void {
     const user = RequestContext.getUser();
-    const actor = user ? `${user.email} [${user.role}]` : 'anonymous';
+    const actor = user ? `${user.email} [#${user.id}]` : 'anonymous';
 
     if (status >= 500) {
       this.logger.error(

@@ -3,66 +3,42 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { MAIL_QUEUE } from './mail.constants';
 
-export interface VerificationEmailJob {
+export interface LinkEmailJob {
   email: string;
   firstName: string;
   token: string;
   locale: string;
+  /** Link validity shown in the email (hours or minutes). */
+  validFor: number;
 }
 
-export interface PasswordResetEmailJob {
+export interface CodeEmailJob {
   email: string;
   firstName: string;
-  token: string;
+  code: string;
   locale: string;
+  /** Minutes the code stays valid. */
+  validFor: number;
 }
 
-export interface CampaignEmailJob {
-  email: string;
-  subject: string;
-  bodyHtml: string;
-  bodyText: string;
-  campaignRecipientId: number;
-}
-
-export interface NewsletterConfirmationJob {
-  email: string;
-  firstName: string;
-  locale: string;
-  type: 'subscribe' | 'unsubscribe';
-}
+const RETRY = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 1000 },
+} as const;
 
 @Injectable()
 export class MailService {
   constructor(@InjectQueue(MAIL_QUEUE) private readonly queue: Queue) {}
 
-  async queueVerificationEmail(data: VerificationEmailJob): Promise<void> {
-    await this.queue.add('verification-email', data, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 1000 },
-    });
+  async queueActivationEmail(data: LinkEmailJob): Promise<void> {
+    await this.queue.add('activation-email', data, RETRY);
   }
 
-  async queuePasswordResetEmail(data: PasswordResetEmailJob): Promise<void> {
-    await this.queue.add('password-reset-email', data, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 1000 },
-    });
+  async queuePasswordResetEmail(data: LinkEmailJob): Promise<void> {
+    await this.queue.add('password-reset-email', data, RETRY);
   }
 
-  async queueCampaignEmail(data: CampaignEmailJob): Promise<void> {
-    await this.queue.add('campaign-email', data, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 1000 },
-    });
-  }
-
-  async queueNewsletterConfirmation(
-    data: NewsletterConfirmationJob,
-  ): Promise<void> {
-    await this.queue.add('newsletter-confirmation', data, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 1000 },
-    });
+  async queueTwoFactorCode(data: CodeEmailJob): Promise<void> {
+    await this.queue.add('two-factor-code', data, RETRY);
   }
 }

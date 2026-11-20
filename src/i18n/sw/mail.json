@@ -1,26 +1,25 @@
 {
-  "verification": {
-    "subject": "Thibitisha anwani yako ya barua pepe",
-    "greeting": "Habari {firstName},",
-    "body": "Tafadhali thibitisha anwani yako ya barua pepe kwa kubonyeza kiungo hapa chini.",
-    "cta": "Thibitisha Barua Pepe",
-    "expiry": "Kiungo hiki kinaisha baada ya siku 7. Ikiwa hutathithibisha akaunti yako ndani ya muda huo, itafutwa kiotomatiki.",
-    "ignore": "Ikiwa hukuunda akaunti, unaweza kupuuza barua pepe hii."
-  },
   "password_reset": {
     "subject": "Weka upya nywila yako",
     "greeting": "Habari {firstName},",
     "body": "Tumepokea ombi la kuweka upya nywila yako. Bonyeza kiungo hapa chini kuchagua nywila mpya.",
     "cta": "Weka Upya Nywila",
-    "expiry": "Kiungo hiki kinaisha baada ya saa 1.",
+    "expiry": "Kiungo hiki kinatumika mara moja na kitaisha baada ya dakika {minutes}.",
     "ignore": "Ikiwa hukuomba kuweka upya nywila, unaweza kupuuza barua pepe hii. Nywila yako haitabadilishwa."
   },
-  "newsletter": {
-    "subscribe_subject": "Umejisajili kwa jarida letu",
-    "subscribe_greeting": "Habari {firstName},",
-    "subscribe_body": "Umejisajili kwa mafanikio kwa jarida letu. Sasa utapokea habari na taarifa kutoka kwetu.",
-    "unsubscribe_subject": "Umejiondoa kwenye jarida",
-    "unsubscribe_greeting": "Habari {firstName},",
-    "unsubscribe_body": "Umejiondoa kwa mafanikio kwenye jarida letu. Hutapokea tena habari kutoka kwetu."
+  "activation": {
+    "subject": "Washa akaunti yako ya AzamTV",
+    "greeting": "Habari {firstName},",
+    "body": "Akaunti imefunguliwa kwa ajili yako kwenye mfumo wa usimamizi wa AzamTV. Bofya kiungo hapa chini kuweka nenosiri na kuiwasha.",
+    "cta": "Washa akaunti",
+    "expiry": "Kiungo hiki kinatumika mara moja na kitaisha baada ya saa {hours}.",
+    "ignore": "Kama hukutarajia ujumbe huu, wasiliana na ICT."
+  },
+  "two_factor": {
+    "subject": "Msimbo wako wa kuingia AzamTV",
+    "greeting": "Habari {firstName},",
+    "body": "Tumia msimbo huu kukamilisha kuingia:",
+    "expiry": "Msimbo utaisha baada ya dakika {minutes} na unatumika mara moja.",
+    "ignore": "Kama hukujaribu kuingia, badilisha nenosiri lako na uwaarifu ICT."
   }
 }

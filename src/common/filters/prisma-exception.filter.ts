@@ -58,7 +58,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
 
     if (!mapped) {
       const user = RequestContext.getUser();
-      const actor = user ? `${user.email} [${user.role}]` : 'anonymous';
+      const actor = user ? `${user.email} [#${user.id}]` : 'anonymous';
       this.logger.error(
         `Unhandled Prisma error ${exception.code} — ${actor}`,
         exception.stack,
