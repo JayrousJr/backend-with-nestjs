@@ -20,37 +20,34 @@ datasource db {
 //   createdAt   DateTime  @default(now()) @map("created_at")
 //   updatedAt   DateTime  @updatedAt @map("updated_at")
 //   deletedAt   DateTime? @map("deleted_at")
+//
+// AzamTV rule: nothing is ever hard-deleted. Records are deactivated
+// (isActive = false) and kept forever.
 
-model User {
-  id        Int     @id @default(autoincrement())
-  uniqueId  String  @unique @default(uuid(7)) @map("unique_id")
-  email     String  @unique
-  password  String
-  firstName String  @map("first_name")
-  lastName  String  @map("last_name")
-  roleId    Int     @map("role_id")
-  tenantId  String? @map("tenant_id")
+// ═══════════════════════════════════════════════════════════════════════════
+//  A1 — Organisation structure
+// ═══════════════════════════════════════════════════════════════════════════
 
-  preferredLocale        String    @default("en") @map("preferred_locale")
+model Department {
+  id       Int     @id @default(autoincrement())
+  uniqueId String  @unique @default(uuid(7)) @map("unique_id")
+  code     String  @unique
+  name     String
+  parentId Int?    @map("parent_id")
+  /// Head of Department — an attribute of the department, never a role name.
+  headEmployeeId   Int? @map("head_employee_id")
+  deputyEmployeeId Int? @map("deputy_employee_id")
 
-  emailVerifiedAt        DateTime? @map("email_verified_at")
-  verificationToken      String?   @unique @map("verification_token")
-  verificationExpiresAt  DateTime? @map("verification_expires_at")
-  passwordResetToken     String?   @unique @map("password_reset_token")
-  passwordResetExpiresAt DateTime? @map("password_reset_expires_at")
-
-  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
-  lockedUntil         DateTime? @map("locked_until")
-
-  avatarId Int? @unique @map("avatar_id")
-
-  role          Role           @relation(fields: [roleId], references: [id])
-  avatar        File?          @relation(fields: [avatarId], references: [id], onDelete: SetNull)
-  permissions   Permission[]   @relation("UserPermissions")
-  sessions      Session[]
-  pageViews     PageView[]
-  notifications Notification[]
-  posts         Post[]
+  parent       Department?  @relation("DepartmentTree", fields: [parentId], references: [id])
+  children     Department[] @relation("DepartmentTree")
+  head         Employee?    @relation("DepartmentHead", fields: [headEmployeeId], references: [id])
+  deputy       Employee?    @relation("DepartmentDeputy", fields: [deputyEmployeeId], references: [id])
+  employees    Employee[]   @relation("EmployeeDepartment")
+  headHistory  DepartmentHeadHistory[]
+  actingHeads  ActingAssignment[]
+  products     Product[]    @relation("ProductOwner")
+  stores       Store[]      @relation("StoreDepartment")
+  assets       Asset[]      @relation("AssetOwner")
 
   createdById Int? @map("created_by_id")
   updatedById Int? @map("updated_by_id")
@@ -62,23 +59,315 @@ model User {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  newsletterSubscription NewsletterSubscriber?
+  @@index([parentId])
+  @@map("departments")
+}
 
+model DepartmentHeadHistory {
+  id           Int       @id @default(autoincrement())
+  departmentId Int       @map("department_id")
+  employeeId   Int?      @map("employee_id")
+  from         DateTime
+  to           DateTime?
+  changedById  Int?      @map("changed_by_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  department Department @relation(fields: [departmentId], references: [id])
+  employee   Employee?  @relation(fields: [employeeId], references: [id])
+
+  @@index([departmentId])
+  @@map("department_head_history")
+}
+
+/// Acting HOD for a period (deputy or anyone else). Assignee rules resolve to
+/// the acting HOD while one is in force.
+model ActingAssignment {
+  id           Int      @id @default(autoincrement())
+  uniqueId     String   @unique @default(uuid(7)) @map("unique_id")
+  departmentId Int      @map("department_id")
+  employeeId   Int      @map("employee_id")
+  from         DateTime
+  to           DateTime
+  reason       String?
+
+  department Department @relation(fields: [departmentId], references: [id])
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([departmentId, from, to])
+  @@map("acting_assignments")
+}
+
+model JobTitle {
+  id       Int    @id @default(autoincrement())
+  uniqueId String @unique @default(uuid(7)) @map("unique_id")
+  code     String @unique
+  name     String
+
+  employees Employee[]
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("job_titles")
+}
+
+model EmploymentType {
+  id       Int    @id @default(autoincrement())
+  uniqueId String @unique @default(uuid(7)) @map("unique_id")
+  code     String @unique
+  name     String
+  /// Contract/Intern types require a contract end date.
+  requiresEndDate Boolean @default(false) @map("requires_end_date")
+
+  employees Employee[]
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("employment_types")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  A1 — Employees
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  SUSPENDED
+  EXITED
+}
+
+model Employee {
+  id               Int            @id @default(autoincrement())
+  uniqueId         String         @unique @default(uuid(7)) @map("unique_id")
+  /// AzamTV's existing employee number — unique, never reused.
+  employeeNumber   String         @unique @map("employee_number")
+  firstName        String         @map("first_name")
+  middleName       String?        @map("middle_name")
+  lastName         String         @map("last_name")
+  gender           Gender
+  /// Must belong to an allowed company domain. Also the login email.
+  companyEmail     String         @unique @map("company_email")
+  phone            String
+  departmentId     Int            @map("department_id")
+  jobTitleId       Int            @map("job_title_id")
+  employmentTypeId Int            @map("employment_type_id")
+  startDate        DateTime       @map("start_date") @db.Date
+  contractEndDate  DateTime?      @map("contract_end_date") @db.Date
+  supervisorId     Int?           @map("supervisor_id")
+  workLocation     String?        @map("work_location")
+  status           EmployeeStatus @default(ACTIVE)
+  photoId          Int?           @unique @map("photo_id")
+  skills            String[]      @default([])
+  qualifications    String[]      @default([])
+  professionalRoles String[]      @default([]) @map("professional_roles")
+
+  department     Department     @relation("EmployeeDepartment", fields: [departmentId], references: [id])
+  jobTitle       JobTitle       @relation(fields: [jobTitleId], references: [id])
+  employmentType EmploymentType @relation(fields: [employmentTypeId], references: [id])
+  supervisor     Employee?      @relation("Supervision", fields: [supervisorId], references: [id])
+  reports        Employee[]     @relation("Supervision")
+  photo          File?          @relation(fields: [photoId], references: [id])
+
+  user              User?
+  driverProfile     DriverProfile?
+  history           EmployeeHistory[]
+  headOf            Department[]            @relation("DepartmentHead")
+  deputyOf          Department[]            @relation("DepartmentDeputy")
+  headHistory       DepartmentHeadHistory[]
+  actingAssignments ActingAssignment[]
+  custodyAssets     Asset[]                 @relation("AssetCustodian")
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([departmentId])
+  @@index([status])
+  @@map("employees")
+}
+
+model DriverProfile {
+  id            Int      @id @default(autoincrement())
+  uniqueId      String   @unique @default(uuid(7)) @map("unique_id")
+  employeeId    Int      @unique @map("employee_id")
+  licenceNumber String   @map("licence_number")
+  licenceClass  String   @map("licence_class")
+  licenceExpiry DateTime @map("licence_expiry") @db.Date
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("driver_profiles")
+}
+
+/// Every change of department, job title, supervisor, employment type or
+/// status (old, new, effective date, by, reason) — shown as a timeline.
+model EmployeeHistory {
+  id            Int      @id @default(autoincrement())
+  employeeId    Int      @map("employee_id")
+  field         String
+  oldValue      String?  @map("old_value")
+  newValue      String?  @map("new_value")
+  effectiveDate DateTime @map("effective_date") @db.Date
+  changedById   Int?     @map("changed_by_id")
+  reason        String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, createdAt])
+  @@map("employee_history")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  A1 — Users (staff accounts, created from employees)
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum UserStatus {
+  PENDING_ACTIVATION
+  ACTIVE
+  LOCKED
+  DEACTIVATED
+}
+
+model User {
+  id         Int        @id @default(autoincrement())
+  uniqueId   String     @unique @default(uuid(7)) @map("unique_id")
+  employeeId Int        @unique @map("employee_id")
+  /// Always the employee's company email.
+  email      String     @unique
+  /// Null until the user sets it through the activation link.
+  password   String?
+  status     UserStatus @default(PENDING_ACTIVATION)
+
+  twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String? @map("two_factor_secret")
+
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until")
+  lastLoginAt         DateTime? @map("last_login_at")
+  lastLoginIp         String?   @map("last_login_ip")
+  passwordChangedAt   DateTime? @map("password_changed_at")
+  preferredLocale     String    @default("en") @map("preferred_locale")
+
+  employee        Employee          @relation(fields: [employeeId], references: [id])
+  roles           UserRole[]        @relation("UserRoles")
+  groups          UserGroupMember[]
+  sessions        Session[]
+  notifications   Notification[]
+  passwordHistory PasswordHistory[]
+  authTokens      AuthToken[]
+  loginEvents     LoginEvent[]
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([status])
   @@map("users")
 }
 
+model PasswordHistory {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  hash      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("password_history")
+}
+
+enum AuthTokenType {
+  ACTIVATION
+  PASSWORD_RESET
+  /// 6-digit login code emailed as the staff 2FA fallback.
+  TWO_FACTOR_EMAIL
+}
+
+/// Single-use activation / reset tokens; only the SHA-256 hash is stored.
+model AuthToken {
+  id        Int           @id @default(autoincrement())
+  userId    Int           @map("user_id")
+  type      AuthTokenType
+  tokenHash String        @unique @map("token_hash")
+  expiresAt DateTime      @map("expires_at")
+  usedAt    DateTime?     @map("used_at")
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, type])
+  @@map("auth_tokens")
+}
+
 // Tracks issued refresh tokens so they can be individually revoked (logout)
-// or revoked in bulk (logout-all). uniqueId is the "sid" claim embedded in
-// both the access and refresh JWTs for a given session.
+// or revoked in bulk. uniqueId is the "sid" claim in both JWTs.
+// absoluteExpiresAt is carried across refreshes (12 h absolute session cap);
+// expiresAt is the sliding idle window.
 model Session {
   id       Int    @id @default(autoincrement())
   uniqueId String @unique @default(uuid(7)) @map("unique_id")
   userId   Int    @map("user_id")
   user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  userAgent String?  @map("user_agent")
-  ipAddress String?  @map("ip_address")
-  expiresAt DateTime @map("expires_at")
+  userAgent         String?  @map("user_agent")
+  ipAddress         String?  @map("ip_address")
+  expiresAt         DateTime @map("expires_at")
+  absoluteExpiresAt DateTime @map("absolute_expires_at")
 
   createdById Int? @map("created_by_id")
   updatedById Int? @map("updated_by_id")
@@ -93,20 +382,87 @@ model Session {
   @@map("sessions")
 }
 
+enum LoginEventType {
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+  LOCKED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET
+  PASSWORD_CHANGED
+  ACTIVATED
+  TWO_FACTOR
+}
+
+model LoginEvent {
+  id        Int            @id @default(autoincrement())
+  userId    Int?           @map("user_id")
+  email     String
+  type      LoginEventType
+  success   Boolean
+  reason    String?
+  ipAddress String?        @map("ip_address")
+  userAgent String?        @map("user_agent")
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("login_events")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  A1 — Permissions, roles, scopes, groups, delegation
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum Scope {
+  ALL
+  OWN_DEPARTMENT
+  OWN_RECORDS
+  ASSIGNED
+  ASSIGNED_STORE
+  ASSIGNED_PRODUCTION
+  OWN_VENDOR
+}
+
+/// Synchronised from code at boot. Administrators grant permissions; they
+/// cannot invent them.
+model Permission {
+  id            Int      @id @default(autoincrement())
+  code          String   @unique
+  module        String
+  description   String
+  allowedScopes Scope[]  @map("allowed_scopes")
+  /// False once a permission disappears from the code catalogue.
+  isActive      Boolean  @default(true) @map("is_active")
+  syncedAt      DateTime @default(now()) @map("synced_at")
+
+  grants RoleGrant[]
+
+  @@index([module])
+  @@map("permissions")
+}
+
 model Role {
   id          Int     @id @default(autoincrement())
   uniqueId    String  @unique @default(uuid(7)) @map("unique_id")
   name        String  @unique
   description String?
+  /// Roles that need a context (store roles per store, inspector roles per
+  /// inspecting department). Null = no context.
+  contextType RoleContextType? @map("context_type")
 
-  users       User[]
-  permissions Permission[] @relation("RolePermissions")
+  grants     RoleGrant[]
+  users      UserRole[]
+  groupRoles GroupRole[]
 
   createdById Int? @map("created_by_id")
   updatedById Int? @map("updated_by_id")
   deletedById Int? @map("deleted_by_id")
 
   isDeleted Boolean   @default(false) @map("is_deleted")
+  /// isActive = false means "retired".
   isActive  Boolean   @default(true) @map("is_active")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -115,14 +471,53 @@ model Role {
   @@map("roles")
 }
 
-model Permission {
+model RoleGrant {
+  id             Int      @id @default(autoincrement())
+  roleId         Int      @map("role_id")
+  permissionCode String   @map("permission_code")
+  scope          Scope
+  /// Supported, not used at go-live (no budget).
+  valueLimit     Decimal? @map("value_limit") @db.Decimal(18, 2)
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionCode], references: [code])
+
+  @@unique([roleId, permissionCode, scope])
+  @@map("role_grants")
+}
+
+enum RoleContextType {
+  STORE
+  DEPARTMENT
+}
+
+model UserRole {
+  id           Int              @id @default(autoincrement())
+  userId       Int              @map("user_id")
+  roleId       Int              @map("role_id")
+  contextType  RoleContextType? @map("context_type")
+  /// Store id or department id depending on contextType.
+  contextId    Int?             @map("context_id")
+  assignedById Int?             @map("assigned_by_id")
+  assignedAt   DateTime         @default(now()) @map("assigned_at")
+
+  user User @relation("UserRoles", fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, roleId, contextType, contextId])
+  @@map("user_roles")
+}
+
+model UserGroup {
   id          Int     @id @default(autoincrement())
   uniqueId    String  @unique @default(uuid(7)) @map("unique_id")
-  name        String  @unique
+  /// Stable code used by seeded approval chains, e.g. STORE_MANAGERS.
+  code        String  @unique
+  name        String
   description String?
 
-  roles Role[] @relation("RolePermissions")
-  users User[] @relation("UserPermissions")
+  members UserGroupMember[]
+  roles   GroupRole[]
 
   createdById Int? @map("created_by_id")
   updatedById Int? @map("updated_by_id")
@@ -134,86 +529,387 @@ model Permission {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  @@map("permissions")
+  @@map("user_groups")
 }
 
-enum PostStatus {
+model UserGroupMember {
+  id        Int      @id @default(autoincrement())
+  groupId   Int      @map("group_id")
+  userId    Int      @map("user_id")
+  addedById Int?     @map("added_by_id")
+  addedAt   DateTime @default(now()) @map("added_at")
+
+  group UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id])
+
+  @@unique([groupId, userId])
+  @@map("user_group_members")
+}
+
+model GroupRole {
+  id      Int @id @default(autoincrement())
+  groupId Int @map("group_id")
+  roleId  Int @map("role_id")
+
+  group UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  role  Role      @relation(fields: [roleId], references: [id])
+
+  @@unique([groupId, roleId])
+  @@map("group_roles")
+}
+
+enum DelegationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+model Delegation {
+  id           Int              @id @default(autoincrement())
+  uniqueId     String           @unique @default(uuid(7)) @map("unique_id")
+  fromUserId   Int              @map("from_user_id")
+  toUserId     Int              @map("to_user_id")
+  /// Empty = all roles of the delegator.
+  roleIds      Int[]            @map("role_ids")
+  start        DateTime
+  end          DateTime
+  reason       String
+  status       DelegationStatus @default(PENDING)
+  approvedById Int?             @map("approved_by_id")
+  decidedAt    DateTime?        @map("decided_at")
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([toUserId, status])
+  @@map("delegations")
+}
+
+/// SoD rules and security settings. code = e.g. SOD_ROLE_SELF_GRANT,
+/// SECURITY_PASSWORD_POLICY. parameters hold the editable values.
+model PolicySetting {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  category    String
+  description String
+  enabled     Boolean  @default(true)
+  parameters  Json?
+  version     Int      @default(1)
+  updatedById Int?     @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("policy_settings")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Shared — audit, files, notifications
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Shared — workflow engine (configured approval points)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// An approval point registered by a module in code (e.g.
+/// employee.exit_clearance). Who approves is configuration: its chain.
+model ApprovalPoint {
+  id              Int     @id @default(autoincrement())
+  code            String  @unique
+  module          String
+  name            String
+  description     String
+  /// Version used by new requests. Null = no steps = no approval needed.
+  activeVersionId Int?    @unique @map("active_version_id")
+  syncedAt        DateTime @default(now()) @map("synced_at")
+
+  versions      ApprovalChainVersion[] @relation("PointVersions")
+  activeVersion ApprovalChainVersion?  @relation("ActiveVersion", fields: [activeVersionId], references: [id])
+  requests      ApprovalRequest[]
+
+  @@map("approval_points")
+}
+
+enum ChainVersionStatus {
   DRAFT
-  PUBLISHED
-  ARCHIVED
+  ACTIVE
+  RETIRED
 }
 
-/// Indexable public content — the only records this app exposes to search
-/// engines. Everything else lives behind auth and is explicitly noindex.
-model Post {
-  id       Int    @id @default(autoincrement())
-  uniqueId String @unique @default(uuid(7)) @map("unique_id")
+model ApprovalChainVersion {
+  id          Int                @id @default(autoincrement())
+  uniqueId    String             @unique @default(uuid(7)) @map("unique_id")
+  pointId     Int                @map("point_id")
+  version     Int
+  status      ChainVersionStatus @default(DRAFT)
+  createdById Int?               @map("created_by_id")
+  activatedById Int?             @map("activated_by_id")
+  activatedAt DateTime?          @map("activated_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
 
-  /// URL segment, unique per locale (/blog/<slug>).
-  slug     String
-  title    String
-  excerpt  String?    @db.Text
-  bodyHtml String     @map("body_html") @db.Text
-  status   PostStatus @default(DRAFT)
+  point      ApprovalPoint   @relation("PointVersions", fields: [pointId], references: [id])
+  activeFor  ApprovalPoint?  @relation("ActiveVersion")
+  steps      ApprovalStep[]
+  requests   ApprovalRequest[]
 
-  /// Locale of this version. Translations of the same article share a
-  /// translationKey so hreflang alternates can be emitted for the group.
-  locale         String  @default("en")
-  translationKey String  @default(uuid(7)) @map("translation_key")
-
-  publishedAt DateTime? @map("published_at")
-
-  /// SEO overrides — fall back to title/excerpt when null.
-  metaTitle       String? @map("meta_title")
-  metaDescription String? @map("meta_description") @db.Text
-  canonicalUrl    String? @map("canonical_url")
-  /// Keep the page out of search results without unpublishing it.
-  noIndex         Boolean @default(false) @map("no_index")
-
-  coverImageId Int?  @map("cover_image_id")
-  coverImage   File? @relation(fields: [coverImageId], references: [id], onDelete: SetNull)
-
-  authorId Int?  @map("author_id")
-  author   User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
-
-  createdById Int? @map("created_by_id")
-  updatedById Int? @map("updated_by_id")
-  deletedById Int? @map("deleted_by_id")
-
-  isDeleted Boolean   @default(false) @map("is_deleted")
-  isActive  Boolean   @default(true) @map("is_active")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  @@unique([slug, locale])
-  @@index([status, publishedAt])
-  @@index([translationKey])
-  @@map("posts")
+  @@unique([pointId, version])
+  @@map("approval_chain_versions")
 }
 
-/// 301/302 map so changing a slug never costs the accumulated ranking of the
-/// old URL. Resolved by the SPA's not-found route via GET /seo/resolve.
-model Redirect {
-  id       Int    @id @default(autoincrement())
-  uniqueId String @unique @default(uuid(7)) @map("unique_id")
+enum ApproverType {
+  USER
+  GROUP
+  ROLE
+  /// Assignee rule resolved at runtime, e.g. HOD of the subject department.
+  RULE
+}
 
-  fromPath   String @unique @map("from_path")
-  toPath     String @map("to_path")
-  statusCode Int    @default(301) @map("status_code")
-  hitCount   Int    @default(0) @map("hit_count")
+enum ApprovalMode {
+  /// Any one assignee decides the step.
+  ANY
+  /// requiredCount approvals needed (N of M).
+  N_OF_M
+  /// Every assignee must approve.
+  ALL
+}
 
-  createdById Int? @map("created_by_id")
-  updatedById Int? @map("updated_by_id")
-  deletedById Int? @map("deleted_by_id")
+model ApprovalStep {
+  id              Int          @id @default(autoincrement())
+  versionId       Int          @map("version_id")
+  order           Int
+  code            String
+  name            String
+  approverType    ApproverType @map("approver_type")
+  approverUserId  Int?         @map("approver_user_id")
+  approverGroupId Int?         @map("approver_group_id")
+  approverRoleId  Int?         @map("approver_role_id")
+  /// For RULE: HOD_OF_SUBJECT_DEPARTMENT | HOD_OF_REQUESTER_DEPARTMENT
+  rule            String?
+  mode            ApprovalMode @default(ANY)
+  requiredCount   Int          @default(1) @map("required_count")
+  allowDelegation Boolean      @default(true) @map("allow_delegation")
+  /// Optional {path, op, value} on the request context; false = step skipped.
+  condition       Json?
+  slaHours        Int?         @map("sla_hours")
 
-  isDeleted Boolean   @default(false) @map("is_deleted")
-  isActive  Boolean   @default(true) @map("is_active")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  version ApprovalChainVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
-  @@map("redirects")
+  @@unique([versionId, order])
+  @@map("approval_steps")
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  RETURNED
+  CANCELLED
+}
+
+model ApprovalRequest {
+  id                  Int                   @id @default(autoincrement())
+  uniqueId            String                @unique @default(uuid(7)) @map("unique_id")
+  pointId             Int                   @map("point_id")
+  versionId           Int?                  @map("version_id")
+  subjectType         String                @map("subject_type")
+  subjectId           String                @map("subject_id")
+  subjectDepartmentId Int?                  @map("subject_department_id")
+  /// Short human description shown in inboxes.
+  title               String
+  requesterUserId     Int?                  @map("requester_user_id")
+  status              ApprovalRequestStatus @default(PENDING)
+  currentStepOrder    Int?                  @map("current_step_order")
+  context             Json?
+  createdAt           DateTime              @default(now()) @map("created_at")
+  completedAt         DateTime?             @map("completed_at")
+
+  point       ApprovalPoint         @relation(fields: [pointId], references: [id])
+  version     ApprovalChainVersion? @relation(fields: [versionId], references: [id])
+  actions     ApprovalAction[]
+  assignments ApprovalAssignment[]
+
+  @@index([subjectType, subjectId])
+  @@index([status])
+  @@map("approval_requests")
+}
+
+/// Who may decide the current step (materialised when the step opens).
+model ApprovalAssignment {
+  id        Int      @id @default(autoincrement())
+  requestId Int      @map("request_id")
+  stepOrder Int      @map("step_order")
+  userId    Int      @map("user_id")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  request ApprovalRequest @relation(fields: [requestId], references: [id])
+
+  @@unique([requestId, stepOrder, userId])
+  @@index([userId, active])
+  @@map("approval_assignments")
+}
+
+enum ApprovalDecision {
+  APPROVE
+  REJECT
+  RETURN
+  COMMENT
+  SKIPPED
+  AUTO_APPROVED
+}
+
+model ApprovalAction {
+  id               Int              @id @default(autoincrement())
+  requestId        Int              @map("request_id")
+  stepOrder        Int?             @map("step_order")
+  stepName         String?          @map("step_name")
+  decision         ApprovalDecision
+  userId           Int?             @map("user_id")
+  onBehalfOfUserId Int?             @map("on_behalf_of_user_id")
+  comment          String?
+  at               DateTime         @default(now())
+
+  request ApprovalRequest @relation(fields: [requestId], references: [id])
+
+  @@index([requestId])
+  @@map("approval_actions")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  A1 — Exit clearance
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum ClearanceStatus {
+  OPEN
+  /// All items resolved; waiting for sign-off (approval point).
+  IN_APPROVAL
+  COMPLETED
+}
+
+model ExitClearance {
+  id          Int             @id @default(autoincrement())
+  uniqueId    String          @unique @default(uuid(7)) @map("unique_id")
+  employeeId  Int             @map("employee_id")
+  status      ClearanceStatus @default(OPEN)
+  /// Approval request for employee.exit_clearance.
+  approvalRequestId Int?      @map("approval_request_id")
+  signedOffById Int?          @map("signed_off_by_id")
+  completedAt DateTime?       @map("completed_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  items ExitClearanceItem[]
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("exit_clearances")
+}
+
+enum ClearanceItemType {
+  /// Item in the employee's custody (B3).
+  CUSTODY
+  /// Open approval task assigned to the employee: reassigned.
+  APPROVAL_TASK
+  /// Open request the employee created: reassigned or cancelled.
+  REQUEST
+  /// Production assignment (Module 03): flagged to the HOD.
+  PRODUCTION
+  OTHER
+}
+
+model ExitClearanceItem {
+  id           Int               @id @default(autoincrement())
+  uniqueId     String            @unique @default(uuid(7)) @map("unique_id")
+  clearanceId  Int               @map("clearance_id")
+  type         ClearanceItemType
+  reference    String?
+  description  String
+  resolved     Boolean           @default(false)
+  resolution   String?
+  resolvedById Int?              @map("resolved_by_id")
+  resolvedAt   DateTime?         @map("resolved_at")
+
+  clearance ExitClearance @relation(fields: [clearanceId], references: [id])
+
+  @@index([clearanceId])
+  @@map("exit_clearance_items")
+}
+
+enum ImportStatus {
+  /// Every row valid; waiting for commit.
+  VALIDATED
+  /// At least one row invalid: nothing can be committed.
+  FAILED
+  COMMITTED
+}
+
+/// Shared Excel import pipeline: upload → validate every row → preview →
+/// commit (all-or-nothing). The file, result and errors are kept.
+model ImportBatch {
+  id           Int          @id @default(autoincrement())
+  uniqueId     String       @unique @default(uuid(7)) @map("unique_id")
+  /// e.g. EMPLOYEE
+  type         String
+  status       ImportStatus
+  fileName     String       @map("file_name")
+  file         Bytes
+  totalRows    Int          @map("total_rows")
+  createCount  Int          @default(0) @map("create_count")
+  updateCount  Int          @default(0) @map("update_count")
+  errorCount   Int          @default(0) @map("error_count")
+  /// Parsed, validated rows (JSON) used by the commit.
+  rows         Json
+  uploadedById Int          @map("uploaded_by_id")
+  committedById Int?        @map("committed_by_id")
+  committedAt  DateTime?    @map("committed_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  errors ImportRowError[]
+
+  @@index([type, createdAt])
+  @@map("import_batches")
+}
+
+model ImportRowError {
+  id      Int     @id @default(autoincrement())
+  batchId Int     @map("batch_id")
+  /// Excel row number (header = 1).
+  row     Int
+  column  String?
+  message String
+
+  batch ImportBatch @relation(fields: [batchId], references: [id])
+
+  @@index([batchId])
+  @@map("import_row_errors")
+}
+
+/// Append-only. Never updated or deleted; kept forever.
+model AuditLog {
+  id               BigInt   @id @default(autoincrement())
+  at               DateTime @default(now())
+  actorUserId      Int?     @map("actor_user_id")
+  actorDepartmentId Int?    @map("actor_department_id")
+  onBehalfOfUserId Int?     @map("on_behalf_of_user_id")
+  action           String
+  entityType       String   @map("entity_type")
+  entityId         String?  @map("entity_id")
+  before           Json?
+  after            Json?
+  ipAddress        String?  @map("ip_address")
+  requestId        String?  @map("request_id")
+
+  @@index([entityType, entityId])
+  @@index([actorUserId, at])
+  @@index([actorDepartmentId, at])
+  @@index([at])
+  @@map("audit_log")
 }
 
 enum NotificationType {
@@ -225,8 +921,7 @@ enum NotificationType {
 
 // In-app notifications, delivered in real time over the EventsGateway socket.
 // titleKey/messageKey hold frontend i18n keys (with `params` as interpolation
-// values) rather than pre-translated text, so the UI renders them in whatever
-// locale the user is currently using.
+// values) rather than pre-translated text.
 model Notification {
   id       Int    @id @default(autoincrement())
   uniqueId String @unique @default(uuid(7)) @map("unique_id")
@@ -254,96 +949,7 @@ model Notification {
   @@map("notifications")
 }
 
-enum CampaignStatus {
-  DRAFT
-  SCHEDULED
-  SENDING
-  SENT
-  FAILED
-}
-
-enum CampaignRecipientStatus {
-  PENDING
-  QUEUED
-  SENT
-  FAILED
-}
-
-model NewsletterSubscriber {
-  id       Int    @id @default(autoincrement())
-  uniqueId String @unique @default(uuid(7)) @map("unique_id")
-  userId   Int    @unique @map("user_id")
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  campaignRecipients CampaignRecipient[]
-
-  createdById Int? @map("created_by_id")
-  updatedById Int? @map("updated_by_id")
-  deletedById Int? @map("deleted_by_id")
-
-  isDeleted Boolean   @default(false) @map("is_deleted")
-  isActive  Boolean   @default(true) @map("is_active")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  @@map("newsletter_subscribers")
-}
-
-model Campaign {
-  id             Int            @id @default(autoincrement())
-  uniqueId       String         @unique @default(uuid(7)) @map("unique_id")
-  subject        String
-  bodyHtml       String         @map("body_html") @db.Text
-  bodyText       String         @map("body_text") @db.Text
-  status         CampaignStatus @default(DRAFT)
-  scheduledAt    DateTime?      @map("scheduled_at")
-  sentAt         DateTime?      @map("sent_at")
-  recipientCount Int            @default(0) @map("recipient_count")
-
-  recipients CampaignRecipient[]
-
-  createdById Int? @map("created_by_id")
-  updatedById Int? @map("updated_by_id")
-  deletedById Int? @map("deleted_by_id")
-
-  isDeleted Boolean   @default(false) @map("is_deleted")
-  isActive  Boolean   @default(true) @map("is_active")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  @@map("campaigns")
-}
-
-model CampaignRecipient {
-  id           Int                      @id @default(autoincrement())
-  uniqueId     String                   @unique @default(uuid(7)) @map("unique_id")
-  campaignId   Int                      @map("campaign_id")
-  subscriberId Int                      @map("subscriber_id")
-  campaign     Campaign                 @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  subscriber   NewsletterSubscriber     @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
-  status       CampaignRecipientStatus  @default(PENDING)
-  sentAt       DateTime?                @map("sent_at")
-  error        String?
-
-  createdById Int? @map("created_by_id")
-  updatedById Int? @map("updated_by_id")
-  deletedById Int? @map("deleted_by_id")
-
-  isDeleted Boolean   @default(false) @map("is_deleted")
-  isActive  Boolean   @default(true) @map("is_active")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  @@unique([campaignId, subscriberId])
-  @@map("campaign_recipients")
-}
-
 model File {
-  posts Post[]
-
   id       Int    @id @default(autoincrement())
   uniqueId String @unique @default(uuid(7)) @map("unique_id")
 
@@ -352,7 +958,8 @@ model File {
   size     Int
   uri      String
 
-  avatarUser User?
+  employeePhoto Employee?
+  productAttachments ProductAttachment[] @relation("ProductAttachmentFile")
 
   createdById Int? @map("created_by_id")
   updatedById Int? @map("updated_by_id")
@@ -367,34 +974,596 @@ model File {
   @@map("files")
 }
 
-model PageView {
-  id        Int      @id @default(autoincrement())
-  path      String
-  referrer  String?
-  userAgent String?  @map("user_agent")
-  ipHash    String?  @map("ip_hash")
-  country   String?
-  sessionId String   @map("session_id")
-  userId    Int?     @map("user_id")
+// ═══════════════════════════════════════════════════════════════════════════
+//  Shared — document numbering (REQ-YYYY-####, ADJ-YYYY-####, tag series…)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+model Counter {
+  key   String @id
+  value Int    @default(0)
 
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([createdAt])
-  @@index([path])
-  @@index([sessionId])
-  @@map("page_views")
+  @@map("counters")
 }
 
-model VisitorStat {
-  id                 Int      @id @default(autoincrement())
-  date               DateTime @db.Date
-  path               String
-  viewCount          Int      @default(0) @map("view_count")
-  uniqueVisitorCount Int      @default(0) @map("unique_visitor_count")
+// ═══════════════════════════════════════════════════════════════════════════
+//  B1 §5 — Product Repository (shared catalogue for procurement and store)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  @@unique([date, path])
-  @@index([date])
-  @@map("visitor_stats")
+model ProductCategory {
+  id       Int    @id @default(autoincrement())
+  uniqueId String @unique @default(uuid(7)) @map("unique_id")
+  code     String @unique
+  name     String
+  /// Asset tag series, e.g. CAM → AZM-CAM-000123.
+  tagPrefix String @map("tag_prefix")
+
+  criteria CategoryCriterion[]
+  versions ProductVersion[]
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("product_categories")
+}
+
+/// Receiving-criteria library of a category (pass/fail with remarks).
+model CategoryCriterion {
+  id         Int     @id @default(autoincrement())
+  uniqueId   String  @unique @default(uuid(7)) @map("unique_id")
+  categoryId Int     @map("category_id")
+  text       String
+  sortOrder  Int     @default(0) @map("sort_order")
+  isActive   Boolean @default(true) @map("is_active")
+
+  category ProductCategory @relation(fields: [categoryId], references: [id])
+
+  @@index([categoryId])
+  @@map("category_criteria")
+}
+
+enum ProductStatus {
+  DRAFT
+  /// Sent for activation; first step (owning-department HOD) pending.
+  SUBMITTED
+  /// Past the first step (Procurement review).
+  IN_REVIEW
+  ACTIVE
+  INACTIVE
+  RETIRED
+  RETURNED
+  REJECTED
+}
+
+enum ProductVersionStatus {
+  DRAFT
+  IN_APPROVAL
+  ACTIVE
+  SUPERSEDED
+  RETURNED
+  REJECTED
+}
+
+enum StoreItemType {
+  FIXED_ASSET
+  CONSUMABLE
+  SPARE
+}
+
+enum TrackingType {
+  /// One asset record per physical unit.
+  SERIALISED
+  QUANTITY
+  /// Quantity with batch number + expiry.
+  BATCH
+}
+
+enum AcquisitionMethod {
+  QUOTATION
+  SINGLE_SOURCE
+}
+
+enum SpecRule {
+  EXACT
+  MIN
+  MAX
+  RANGE
+  ONE_OF
+  TEXT
+}
+
+model Product {
+  id       Int           @id @default(autoincrement())
+  uniqueId String        @unique @default(uuid(7)) @map("unique_id")
+  /// Set by Procurement at activation.
+  code     String?       @unique
+  status   ProductStatus @default(DRAFT)
+  /// The creating department: orders and inspects the product.
+  owningDepartmentId Int @map("owning_department_id")
+  /// The version in force (null until first activation).
+  currentVersionId   Int? @unique @map("current_version_id")
+
+  // ── set by Procurement at activation (§5.3) ──
+  itemType          StoreItemType?     @map("item_type")
+  trackingType      TrackingType?      @map("tracking_type")
+  acquisitionMethod AcquisitionMethod? @map("acquisition_method")
+  /// Single-source vendor (vendor register arrives with B1 §8).
+  singleSourceVendor String?           @map("single_source_vendor")
+  /// VAT rate in percent (tax code).
+  vatRate           Decimal?           @map("vat_rate") @db.Decimal(5, 2)
+  isVehicle         Boolean            @default(false) @map("is_vehicle")
+  mergedIntoId      Int?               @map("merged_into_id")
+
+  owningDepartment Department       @relation("ProductOwner", fields: [owningDepartmentId], references: [id])
+  currentVersion   ProductVersion?  @relation("ProductCurrentVersion", fields: [currentVersionId], references: [id])
+  versions         ProductVersion[] @relation("ProductVersions")
+  mergedInto       Product?         @relation("ProductMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom       Product[]        @relation("ProductMerge")
+  assets           Asset[]
+  balances         StockBalance[]
+  settings         StockSetting[]
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([owningDepartmentId])
+  @@index([status])
+  @@map("products")
+}
+
+/// Editing an Active product creates a new version; documents keep the
+/// version they started with.
+model ProductVersion {
+  id          Int                  @id @default(autoincrement())
+  uniqueId    String               @unique @default(uuid(7)) @map("unique_id")
+  productId   Int                  @map("product_id")
+  version     Int
+  status      ProductVersionStatus @default(DRAFT)
+  name        String
+  description String
+  categoryId  Int                  @map("category_id")
+  unit        String
+  /// Reference unit price (TZS), for information only.
+  referencePrice Decimal?          @map("reference_price") @db.Decimal(14, 2)
+  authorUserId   Int               @map("author_user_id")
+  approvalRequestId Int?           @map("approval_request_id")
+  submittedAt DateTime?            @map("submitted_at")
+  activatedAt DateTime?            @map("activated_at")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  product     Product          @relation("ProductVersions", fields: [productId], references: [id])
+  currentOf   Product?         @relation("ProductCurrentVersion")
+  category    ProductCategory  @relation(fields: [categoryId], references: [id])
+  specs       ProductSpec[]
+  criteria    ProductCriterion[]
+  attachments ProductAttachment[]
+  assets      Asset[]
+
+  @@unique([productId, version])
+  @@map("product_versions")
+}
+
+model ProductSpec {
+  id        Int      @id @default(autoincrement())
+  versionId Int      @map("version_id")
+  sortOrder Int      @default(0) @map("sort_order")
+  attribute String
+  rule      SpecRule
+  /// EXACT/MIN/MAX/TEXT value · RANGE minimum · ONE_OF "a | b | c".
+  value     String
+  /// RANGE maximum.
+  valueMax  String?  @map("value_max")
+  unit      String?
+
+  version ProductVersion @relation(fields: [versionId], references: [id])
+
+  @@index([versionId])
+  @@map("product_specs")
+}
+
+model ProductCriterion {
+  id        Int     @id @default(autoincrement())
+  versionId Int     @map("version_id")
+  sortOrder Int     @default(0) @map("sort_order")
+  text      String
+  /// Taken from the category library (null = department-specific).
+  libraryId Int?    @map("library_id")
+
+  version ProductVersion @relation(fields: [versionId], references: [id])
+
+  @@index([versionId])
+  @@map("product_criteria")
+}
+
+model ProductAttachment {
+  id        Int @id @default(autoincrement())
+  versionId Int @map("version_id")
+  fileId    Int @map("file_id")
+
+  version ProductVersion @relation(fields: [versionId], references: [id])
+  file    File           @relation("ProductAttachmentFile", fields: [fileId], references: [id])
+
+  @@unique([versionId, fileId])
+  @@map("product_attachments")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  B2 — Store & Inventory: stores, locations, assets, stock
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum StoreType {
+  /// The only receiving store (GRN, quarantine, rejected).
+  MAIN
+  SUB
+}
+
+model Store {
+  id       Int       @id @default(autoincrement())
+  uniqueId String    @unique @default(uuid(7)) @map("unique_id")
+  code     String    @unique
+  name     String
+  type     StoreType
+  managingDepartmentId Int @map("managing_department_id")
+  address  String?
+
+  managingDepartment Department      @relation("StoreDepartment", fields: [managingDepartmentId], references: [id])
+  locations          StoreLocation[]
+  assets             Asset[]
+  balances           StockBalance[]
+  settings           StockSetting[]
+  adjustments        StockAdjustment[]
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("stores")
+}
+
+enum LocationKind {
+  GENERAL
+  /// Main store: received goods waiting for inspection.
+  RECEIVING
+  /// Main store: failed inspection, waiting to go back to the vendor.
+  REJECTED
+  /// Virtual: dispatched by a transfer, not yet received.
+  IN_TRANSIT
+}
+
+/// Section / shelf / bin inside a store (optional hierarchy).
+model StoreLocation {
+  id       Int          @id @default(autoincrement())
+  uniqueId String       @unique @default(uuid(7)) @map("unique_id")
+  storeId  Int          @map("store_id")
+  parentId Int?         @map("parent_id")
+  code     String
+  name     String
+  kind     LocationKind @default(GENERAL)
+  isActive Boolean      @default(true) @map("is_active")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  store    Store           @relation(fields: [storeId], references: [id])
+  parent   StoreLocation?  @relation("LocationTree", fields: [parentId], references: [id])
+  children StoreLocation[] @relation("LocationTree")
+  assets   Asset[]
+  balances StockBalance[]
+
+  @@unique([storeId, code])
+  @@map("store_locations")
+}
+
+/// Minimum / reorder / maximum levels per product per store.
+model StockSetting {
+  id                Int  @id @default(autoincrement())
+  storeId           Int  @map("store_id")
+  productId         Int  @map("product_id")
+  minLevel          Int  @default(0) @map("min_level")
+  reorderLevel      Int  @default(0) @map("reorder_level")
+  maxLevel          Int? @map("max_level")
+  defaultLocationId Int? @map("default_location_id")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  store   Store   @relation(fields: [storeId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([storeId, productId])
+  @@map("stock_settings")
+}
+
+/// Every asset tag ever issued (printed before or at tagging). A tag is
+/// never reused.
+model AssetTag {
+  id         Int      @id @default(autoincrement())
+  tag        String   @unique
+  prefix     String
+  number     Int
+  issuedById Int?     @map("issued_by_id")
+  issuedAt   DateTime @default(now()) @map("issued_at")
+  printedAt  DateTime? @map("printed_at")
+
+  asset Asset?
+
+  @@unique([prefix, number])
+  @@map("asset_tags")
+}
+
+enum AssetStatus {
+  IN_QUARANTINE
+  IN_STORE
+  RESERVED
+  CHECKED_OUT_TO_PRODUCTION
+  ASSIGNED_TO_EMPLOYEE
+  IN_TRANSIT
+  UNDER_MAINTENANCE
+  AT_VENDOR_FOR_REPAIR
+  MISSING
+  DAMAGED
+  LOST
+  PENDING_DISPOSAL
+  DISPOSED
+}
+
+enum AssetCondition {
+  GOOD
+  FAIR
+  NEEDS_REPAIR
+  UNDER_REPAIR
+  BEYOND_REPAIR
+}
+
+enum AssetSource {
+  PURCHASE
+  OPENING_BALANCE
+  FOUND
+  DONATED
+}
+
+/// One record per physical unit (equipment and vehicles).
+model Asset {
+  id       Int    @id @default(autoincrement())
+  uniqueId String @unique @default(uuid(7)) @map("unique_id")
+  tagId    Int    @unique @map("tag_id")
+  tag      String @unique
+  serialNumber String? @map("serial_number")
+  brand    String?
+  model    String?
+  productId        Int @map("product_id")
+  productVersionId Int @map("product_version_id")
+  /// Technical owner (the product's owning department).
+  owningDepartmentId Int @map("owning_department_id")
+  source   AssetSource
+
+  // References to the purchase file (tender module; blank for opening balance).
+  lpoRef        String? @map("lpo_ref")
+  grnRef        String? @map("grn_ref")
+  inspectionRef String? @map("inspection_ref")
+  vendorRef     String? @map("vendor_ref")
+  /// Purchase price TZS excl. VAT — information and export only (#21).
+  purchasePrice  Decimal?  @map("purchase_price") @db.Decimal(14, 2)
+  priceEstimated Boolean   @default(false) @map("price_estimated")
+  purchaseDate   DateTime? @map("purchase_date") @db.Date
+  warrantyExpiry DateTime? @map("warranty_expiry") @db.Date
+
+  storeId    Int? @map("store_id")
+  locationId Int? @map("location_id")
+  /// Employee custodian (B3 handover).
+  custodianEmployeeId Int? @map("custodian_employee_id")
+  condition AssetCondition @default(GOOD)
+  status    AssetStatus
+  /// Kit membership: component → parent kit asset.
+  parentAssetId Int?    @map("parent_asset_id")
+  isKit         Boolean @default(false) @map("is_kit")
+  notes         String?
+
+  assetTag   AssetTag       @relation(fields: [tagId], references: [id])
+  product    Product        @relation(fields: [productId], references: [id])
+  version    ProductVersion @relation(fields: [productVersionId], references: [id])
+  owningDepartment Department @relation("AssetOwner", fields: [owningDepartmentId], references: [id])
+  store      Store?         @relation(fields: [storeId], references: [id])
+  location   StoreLocation? @relation(fields: [locationId], references: [id])
+  custodian  Employee?      @relation("AssetCustodian", fields: [custodianEmployeeId], references: [id])
+  parent     Asset?         @relation("Kit", fields: [parentAssetId], references: [id])
+  components Asset[]        @relation("Kit")
+  vehicle    VehicleDetails?
+
+  createdById Int? @map("created_by_id")
+  updatedById Int? @map("updated_by_id")
+  deletedById Int? @map("deleted_by_id")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([productId])
+  @@index([storeId, status])
+  @@index([owningDepartmentId])
+  @@index([serialNumber])
+  @@map("assets")
+}
+
+/// Vehicle fields read by Module 07. Vehicles are never handed over to
+/// individuals.
+model VehicleDetails {
+  id                 Int       @id @default(autoincrement())
+  assetId            Int       @unique @map("asset_id")
+  registrationNumber String    @unique @map("registration_number")
+  chassisNumber      String?   @map("chassis_number")
+  engineNumber       String?   @map("engine_number")
+  fuelType           String?   @map("fuel_type")
+  seatingCapacity    Int?      @map("seating_capacity")
+  insuranceExpiry    DateTime? @map("insurance_expiry") @db.Date
+  roadLicenceExpiry  DateTime? @map("road_licence_expiry") @db.Date
+  serviceIntervalKm  Int?      @map("service_interval_km")
+  serviceIntervalMonths Int?   @map("service_interval_months")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@map("vehicle_details")
+}
+
+/// Quantity stock (consumables, spares, cables) per store location and
+/// batch. Serialised items are counted from the asset register.
+model StockBalance {
+  id          Int       @id @default(autoincrement())
+  storeId     Int       @map("store_id")
+  locationId  Int       @map("location_id")
+  productId   Int       @map("product_id")
+  /// "" for non-batch products.
+  batchNumber String    @default("") @map("batch_number")
+  expiryDate  DateTime? @map("expiry_date") @db.Date
+  onHand      Int       @default(0) @map("on_hand")
+  quarantine  Int       @default(0)
+  reserved    Int       @default(0)
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  store    Store         @relation(fields: [storeId], references: [id])
+  location StoreLocation @relation(fields: [locationId], references: [id])
+  product  Product       @relation(fields: [productId], references: [id])
+
+  @@unique([storeId, locationId, productId, batchNumber])
+  @@index([productId])
+  @@map("stock_balances")
+}
+
+enum StockTxnType {
+  RECEIVE_QUARANTINE
+  STOCK_IN
+  REJECT_TO_VENDOR
+  RESERVE
+  RELEASE
+  ISSUE
+  HANDOVER
+  PRODUCTION_CHECKOUT
+  PRODUCTION_RETURN
+  RETURN_TO_STORE
+  TRANSFER_DISPATCH
+  TRANSFER_RECEIVE
+  REPAIR_OUT
+  REPAIR_BACK
+  ADJUSTMENT
+  OPENING_BALANCE
+  LOCATION_MOVE
+  DISPOSAL
+  REVERSAL
+}
+
+/// Stock ledger. Never edited or deleted (DB trigger); mistakes are
+/// corrected with a reversing transaction.
+model StockTransaction {
+  id          Int          @id @default(autoincrement())
+  uniqueId    String       @unique @default(uuid(7)) @map("unique_id")
+  type        StockTxnType
+  at          DateTime     @default(now())
+  userId      Int?         @map("user_id")
+  storeId     Int          @map("store_id")
+  locationId  Int?         @map("location_id")
+  toLocationId Int?        @map("to_location_id")
+  productId   Int          @map("product_id")
+  assetId     Int?         @map("asset_id")
+  batchNumber String?      @map("batch_number")
+  /// Signed change in on-hand quantity (assets: +1 / -1 / 0).
+  quantity    Int
+  fromStatus  AssetStatus? @map("from_status")
+  toStatus    AssetStatus? @map("to_status")
+  condition   AssetCondition?
+  /// Reference document, e.g. StockAdjustment / ADJ-2026-0001.
+  referenceType String?    @map("reference_type")
+  referenceId   String?    @map("reference_id")
+  reason      String?
+  /// Beneficiary for issues (department / employee / production).
+  beneficiary Json?
+  reversalOfId Int?        @map("reversal_of_id")
+
+  @@index([storeId, at])
+  @@index([productId, at])
+  @@index([assetId, at])
+  @@index([referenceType, referenceId])
+  @@map("stock_transactions")
+}
+
+enum AdjustmentType {
+  /// Tagging campaign at go-live (§12).
+  OPENING_BALANCE
+  FOUND
+  DONATED
+  COUNT_VARIANCE
+  CORRECTION
+}
+
+enum AdjustmentStatus {
+  DRAFT
+  IN_APPROVAL
+  APPROVED
+  RETURNED
+  REJECTED
+  CANCELLED
+}
+
+/// Stock adjustment document; posted only after stock_adjustment.approval.
+model StockAdjustment {
+  id       Int              @id @default(autoincrement())
+  uniqueId String           @unique @default(uuid(7)) @map("unique_id")
+  number   String           @unique
+  type     AdjustmentType
+  status   AdjustmentStatus @default(DRAFT)
+  storeId  Int              @map("store_id")
+  reason   String
+  createdByUserId   Int     @map("created_by_user_id")
+  approvalRequestId Int?    @map("approval_request_id")
+  importBatchId     Int?    @map("import_batch_id")
+  postedAt  DateTime?       @map("posted_at")
+  /// Set when posting after approval failed (e.g. a tag was used meanwhile).
+  postError String?         @map("post_error")
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  store Store                 @relation(fields: [storeId], references: [id])
+  lines StockAdjustmentLine[]
+
+  @@index([storeId, status])
+  @@map("stock_adjustments")
+}
+
+model StockAdjustmentLine {
+  id           Int     @id @default(autoincrement())
+  adjustmentId Int     @map("adjustment_id")
+  lineNo       Int     @map("line_no")
+  productId    Int     @map("product_id")
+  locationId   Int     @map("location_id")
+  /// Quantity products: signed quantity. Serialised: 1 per line.
+  quantity     Int
+  batchNumber  String? @map("batch_number")
+  expiryDate   DateTime? @map("expiry_date") @db.Date
+  /// Serialised: the asset to create (tag, serial, condition, holder…).
+  asset        Json?
+  /// Set when posted.
+  assetId      Int?    @map("asset_id")
+
+  adjustment StockAdjustment @relation(fields: [adjustmentId], references: [id])
+
+  @@index([adjustmentId])
+  @@map("stock_adjustment_lines")
 }
