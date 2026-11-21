@@ -99,4 +99,68 @@ export const APPROVAL_POINTS: Record<string, ApprovalPointDefinition> = {
       },
     ],
   },
+  'transfer.approval': {
+    module: 'B2',
+    name: 'Store transfer',
+    description:
+      'Transfers between stores. No steps by default: approved on request.',
+    permission: 'transfer.approve',
+    defaultSteps: [],
+  },
+  'transfer_discrepancy.approval': {
+    module: 'B2',
+    name: 'Transfer discrepancy',
+    description:
+      'Quantities or assets dispatched but not received: approve the write-off (assets become missing)',
+    permission: 'transfer.approve',
+    defaultSteps: [
+      {
+        code: 'store_managers',
+        name: 'Store Managers',
+        approverType: 'GROUP',
+        approver: 'STORE_MANAGERS',
+        mode: 'ANY',
+      },
+    ],
+  },
+  'stock_count.approval': {
+    module: 'B2',
+    name: 'Stock count',
+    description:
+      'Count variances become adjustments; assets not found become missing',
+    permission: 'stock_count.approve',
+    defaultSteps: [
+      {
+        code: 'store_managers',
+        name: 'Store Managers',
+        approverType: 'GROUP',
+        approver: 'STORE_MANAGERS',
+        mode: 'ANY',
+      },
+    ],
+  },
+  'disposal.approval': {
+    module: 'B2',
+    name: 'Disposal',
+    description:
+      'Owning-department HOD (technical opinion), then the Disposal Committee',
+    permission: 'disposal.approve',
+    defaultSteps: [
+      {
+        code: 'hod_opinion',
+        name: 'Owning department HOD',
+        approverType: 'RULE',
+        approver: 'HOD_OF_SUBJECT_DEPARTMENT',
+        mode: 'ANY',
+        allowDelegation: true,
+      },
+      {
+        code: 'disposal_committee',
+        name: 'Disposal Committee',
+        approverType: 'GROUP',
+        approver: 'DISPOSAL_COMMITTEE',
+        mode: 'ANY',
+      },
+    ],
+  },
 };

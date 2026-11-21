@@ -11,6 +11,7 @@ import type { CurrentUser } from '@common';
 import { AccessService, type PermissionCode } from '@access';
 import { AuditService } from '../audit/audit.service';
 import { AssetsService } from '../store/assets.service';
+import { StoresService } from '../store/stores.service';
 
 type Cell = string | number | Date | null | undefined;
 
@@ -57,6 +58,7 @@ export class ReportsService {
     private readonly access: AccessService,
     private readonly audit: AuditService,
     private readonly assets: AssetsService,
+    private readonly stores: StoresService,
   ) {}
 
   private readonly reports: Record<string, ReportDefinition> = {
@@ -809,6 +811,314 @@ export class ReportsService {
         };
       },
     },
+    transfers: {
+      name: 'Transfers',
+      description:
+        'Transfers by status, with in-transit, overdue and discrepancy flags',
+      permission: 'stock.view',
+      build: async (user) => {
+        const ids = await this.storeIds(user);
+        const rows = await this.prisma.db.transfer.findMany({
+          where: ids
+            ? { OR: [{ fromStoreId: { in: ids } }, { toStoreId: { in: ids } }] }
+            : {},
+          include: { fromStore: true, toStore: true, lines: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        const now = new Date();
+        return {
+          title: 'Transfers',
+          columns: [
+            { header: 'Number', width: 16 },
+            { header: 'From', width: 18 },
+            { header: 'To', width: 18 },
+            { header: 'Reason', width: 14 },
+            { header: 'Status', width: 14 },
+            { header: 'Lines', width: 8 },
+            { header: 'Dispatched', width: 16, format: 'datetime' },
+            { header: 'Expected', width: 16, format: 'datetime' },
+            { header: 'Received', width: 16, format: 'datetime' },
+            { header: 'Overdue', width: 9 },
+            { header: 'Short (units)', width: 12 },
+          ],
+          rows: rows.map((t) => [
+            t.number,
+            t.fromStore.name,
+            t.toStore.name,
+            t.reason,
+            t.status,
+            t.lines.length,
+            t.dispatchedAt,
+            t.expectedArrival,
+            t.receivedAt,
+            t.status === 'DISPATCHED' &&
+            t.expectedArrival &&
+            t.expectedArrival < now
+              ? 'Yes'
+              : '',
+            t.lines.reduce(
+              (n, l) =>
+                n + Math.max((l.dispatchedQty ?? 0) - (l.receivedQty ?? 0), 0),
+              0,
+            ) || null,
+          ]),
+        };
+      },
+    },
+    'count-variances': {
+      name: 'Stock count variances',
+      description: 'Every line with a difference between expected and counted',
+      permission: 'stock.view',
+      build: async (user) => {
+        const ids = await this.storeIds(user);
+        const counts = await this.prisma.db.stockCount.findMany({
+          where: {
+            status: { in: ['IN_APPROVAL', 'APPROVED', 'REJECTED'] },
+            ...(ids ? { storeId: { in: ids } } : {}),
+          },
+          include: { lines: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        const products = await this.prisma.db.product.findMany({
+          include: { currentVersion: true },
+        });
+        const pBy = new Map(products.map((p) => [p.id, p]));
+        const stores = await this.prisma.db.store.findMany();
+        const sBy = new Map(stores.map((x) => [x.id, x.name]));
+        const assets = await this.prisma.db.asset.findMany({
+          where: {
+            id: {
+              in: counts
+                .flatMap((c) => c.lines.map((l) => l.assetId))
+                .filter((x): x is number => !!x),
+            },
+          },
+          select: { id: true, tag: true },
+        });
+        const aBy = new Map(assets.map((a) => [a.id, a.tag]));
+        return {
+          title: 'Stock count variances',
+          columns: [
+            { header: 'Count', width: 16 },
+            { header: 'Store', width: 18 },
+            { header: 'Status', width: 12 },
+            { header: 'Product code', width: 12 },
+            { header: 'Product', width: 30 },
+            { header: 'Asset tag', width: 18 },
+            { header: 'Batch', width: 12 },
+            { header: 'Expected', width: 10 },
+            { header: 'Counted', width: 10 },
+            { header: 'Variance', width: 10 },
+          ],
+          rows: counts.flatMap((c) =>
+            c.lines
+              .filter((l) => l.countedQty !== l.expectedQty)
+              .map((l) => [
+                c.number,
+                sBy.get(c.storeId),
+                c.status,
+                pBy.get(l.productId)?.code,
+                pBy.get(l.productId)?.currentVersion?.name,
+                l.assetId ? aBy.get(l.assetId) : null,
+                l.batchNumber,
+                l.expectedQty,
+                l.countedQty,
+                (l.countedQty ?? 0) - l.expectedQty,
+              ]),
+          ),
+        };
+      },
+    },
+    'maintenance-downtime': {
+      name: 'Maintenance and downtime',
+      description:
+        'Tickets with source, internal / vendor repair and hours out of service (no costs, #21)',
+      permission: 'asset.view',
+      build: async (user) => {
+        const assetRows = await this.assets.exportRows(user, {});
+        const aBy = new Map(assetRows.map((a) => [a.id, a]));
+        const rows = await this.prisma.db.maintenanceTicket.findMany({
+          where: { assetId: { in: [...aBy.keys()] } },
+          orderBy: { createdAt: 'desc' },
+        });
+        const now = Date.now();
+        return {
+          title: 'Maintenance and downtime',
+          columns: [
+            { header: 'Ticket', width: 16 },
+            { header: 'Tag', width: 18 },
+            { header: 'Product', width: 28 },
+            { header: 'Source', width: 16 },
+            { header: 'Status', width: 12 },
+            { header: 'Repair', width: 22 },
+            { header: 'Under warranty', width: 10 },
+            { header: 'Opened', width: 16, format: 'datetime' },
+            { header: 'Closed', width: 16, format: 'datetime' },
+            { header: 'Downtime (hours)', width: 12 },
+          ],
+          rows: rows.map((t) => {
+            const a = aBy.get(t.assetId)!;
+            return [
+              t.number,
+              a.tag,
+              a.version.name,
+              t.source,
+              t.status,
+              t.external ? `Vendor: ${t.vendorName ?? ''}` : 'Internal',
+              t.underWarranty ? 'Yes' : '',
+              t.createdAt,
+              t.completedAt,
+              t.startedAt
+                ? Math.round(
+                    ((t.completedAt?.getTime() ?? now) -
+                      t.startedAt.getTime()) /
+                      3600_000,
+                  )
+                : null,
+            ];
+          }),
+        };
+      },
+    },
+    'adjustments-disposals': {
+      name: 'Adjustments and disposals',
+      description: 'Stock adjustments and asset disposals with their status',
+      permission: 'stock.view',
+      build: async (user) => {
+        const ids = await this.storeIds(user);
+        const [adjs, disposals] = await Promise.all([
+          this.prisma.db.stockAdjustment.findMany({
+            where: ids ? { storeId: { in: ids } } : {},
+            include: { store: true, lines: true },
+            orderBy: { createdAt: 'desc' },
+          }),
+          this.prisma.db.disposal.findMany({ orderBy: { createdAt: 'desc' } }),
+        ]);
+        const visible = new Set(
+          (await this.assets.exportRows(user, {})).map((a) => a.id),
+        );
+        const assets = await this.prisma.db.asset.findMany({
+          where: { id: { in: disposals.map((d) => d.assetId) } },
+          include: { version: true, store: true },
+        });
+        const aBy = new Map(assets.map((a) => [a.id, a]));
+        return {
+          title: 'Adjustments and disposals',
+          columns: [
+            { header: 'Number', width: 16 },
+            { header: 'Kind', width: 16 },
+            { header: 'Store', width: 18 },
+            { header: 'Status', width: 12 },
+            { header: 'Detail', width: 40 },
+            { header: 'Reason', width: 40 },
+            { header: 'Date', width: 16, format: 'datetime' },
+          ],
+          rows: [
+            ...adjs.map((a) => [
+              a.number,
+              `Adjustment: ${a.type}`,
+              a.store.name,
+              a.status,
+              `${a.lines.length} lines, ${a.lines.filter((l) => l.asset).length} assets`,
+              a.reason,
+              a.createdAt,
+            ]),
+            ...disposals
+              .filter((d) => visible.has(d.assetId))
+              .map((d) => {
+                const a = aBy.get(d.assetId)!;
+                return [
+                  d.number,
+                  `Disposal: ${d.method}`,
+                  a.store?.name,
+                  d.status,
+                  `${a.tag} ${a.version.name}`,
+                  d.reason,
+                  d.createdAt,
+                ];
+              }),
+          ],
+        };
+      },
+    },
+    'assets-out': {
+      name: 'Assets out and missing',
+      description:
+        'Assets with employees, productions, in repair, in transit, missing or lost',
+      permission: 'asset.view',
+      build: async (user) => {
+        const rows = await this.assets.exportRows(user, {
+          statuses: [
+            'ASSIGNED_TO_EMPLOYEE',
+            'CHECKED_OUT_TO_PRODUCTION',
+            'UNDER_MAINTENANCE',
+            'AT_VENDOR_FOR_REPAIR',
+            'IN_TRANSIT',
+            'MISSING',
+            'LOST',
+          ],
+        });
+        return {
+          title: 'Assets out and missing',
+          columns: [
+            { header: 'Tag', width: 18 },
+            { header: 'Product', width: 30 },
+            { header: 'Status', width: 22 },
+            { header: 'Held by', width: 26 },
+            { header: 'Store', width: 18 },
+            { header: 'Owning department', width: 22 },
+          ],
+          rows: rows.map((a) => [
+            a.tag,
+            a.version.name,
+            a.status,
+            a.custodian
+              ? `${a.custodian.employeeNumber} ${fullName(a.custodian)}`
+              : null,
+            a.store?.name,
+            a.owningDepartment.name,
+          ]),
+        };
+      },
+    },
+    'warranty-expiring': {
+      name: 'Warranty expiring',
+      description: 'Assets whose warranty ends within N days',
+      permission: 'asset.view',
+      params: [
+        { key: 'days', label: 'Within days (default 90)', type: 'number' },
+      ],
+      build: async (user, p) => {
+        const days = Number(p.days) > 0 ? Number(p.days) : 90;
+        const limit = new Date(Date.now() + days * 86_400_000);
+        const today = new Date(Date.now() - 86_400_000);
+        const rows = (await this.assets.exportRows(user, {})).filter(
+          (a) =>
+            a.warrantyExpiry &&
+            a.warrantyExpiry >= today &&
+            a.warrantyExpiry <= limit,
+        );
+        return {
+          title: `Warranty ending within ${days} days`,
+          columns: [
+            { header: 'Tag', width: 18 },
+            { header: 'Product', width: 30 },
+            { header: 'Serial', width: 18 },
+            { header: 'Warranty expiry', width: 14, format: 'date' },
+            { header: 'Vendor', width: 22 },
+            { header: 'Status', width: 18 },
+          ],
+          rows: rows.map((a) => [
+            a.tag,
+            a.version.name,
+            a.serialNumber,
+            a.warrantyExpiry,
+            a.vendorRef,
+            a.status,
+          ]),
+        };
+      },
+    },
     'vehicle-documents': {
       name: 'Vehicles with expiring documents',
       description:
@@ -854,6 +1164,12 @@ export class ReportsService {
       },
     },
   };
+
+  /** Stores whose stock the user sees (null = all). */
+  private async storeIds(user: CurrentUser): Promise<number[] | null> {
+    const scope = await this.stores.stockScope(user);
+    return scope.all ? null : scope.storeIds;
+  }
 
   /** Reports the user may run. */
   async available(user: CurrentUser) {

@@ -1,11 +1,21 @@
 import { Args, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
-import { AdjustmentStatus } from '@db';
+import { AdjustmentStatus, StockDocType, TransferStatus } from '@db';
 import { AuthUser } from '@common';
 import type { CurrentUser } from '@common';
 import { RequirePermission } from '@access';
 import { StoresService } from './stores.service';
 import { AssetsService } from './assets.service';
 import { AdjustmentsService } from './adjustments.service';
+import { TransfersService } from './transfers.service';
+import { IssuesService } from './issues.service';
+import {
+  CreateStockDocumentInput,
+  CreateTransferInput,
+  DispatchTransferInput,
+  ReceiveTransferInput,
+  StockDocumentEntity,
+  TransferEntity,
+} from './transfers.types';
 import {
   AssetEntity,
   AssetFilterInput,
@@ -16,6 +26,7 @@ import {
   SaveLocationInput,
   SaveStoreInput,
   StockAdjustmentEntity,
+  StockBalanceEntity,
   StockLevelEntity,
   StockLevelFilterInput,
   StockMovementEntity,
@@ -31,7 +42,92 @@ export class StoreResolver {
     private readonly storesService: StoresService,
     private readonly assetsService: AssetsService,
     private readonly adjustmentsService: AdjustmentsService,
+    private readonly transfersService: TransfersService,
+    private readonly issuesService: IssuesService,
   ) {}
+
+  // ── transfers ──
+  @Query(() => [TransferEntity])
+  transfers(
+    @AuthUser() user: CurrentUser,
+    @Args('storeUniqueId', { nullable: true }) storeUniqueId?: string,
+    @Args('statuses', { type: () => [TransferStatus], nullable: true })
+    statuses?: TransferStatus[],
+  ) {
+    return this.transfersService.list(user, storeUniqueId, statuses);
+  }
+
+  @Query(() => TransferEntity)
+  transfer(@AuthUser() user: CurrentUser, @Args('uniqueId') uniqueId: string) {
+    return this.transfersService.get(user, uniqueId);
+  }
+
+  @RequirePermission('transfer.create')
+  @Mutation(() => TransferEntity)
+  createTransfer(
+    @AuthUser() user: CurrentUser,
+    @Args('input') input: CreateTransferInput,
+  ) {
+    return this.transfersService.create(user, input);
+  }
+
+  @RequirePermission('transfer.dispatch')
+  @Mutation(() => TransferEntity)
+  dispatchTransfer(
+    @AuthUser() user: CurrentUser,
+    @Args('uniqueId') uniqueId: string,
+    @Args('input') input: DispatchTransferInput,
+  ) {
+    return this.transfersService.dispatch(user, uniqueId, input);
+  }
+
+  @RequirePermission('transfer.receive')
+  @Mutation(() => TransferEntity)
+  receiveTransfer(
+    @AuthUser() user: CurrentUser,
+    @Args('uniqueId') uniqueId: string,
+    @Args('input') input: ReceiveTransferInput,
+  ) {
+    return this.transfersService.receive(user, uniqueId, input);
+  }
+
+  @Mutation(() => TransferEntity)
+  cancelTransfer(
+    @AuthUser() user: CurrentUser,
+    @Args('uniqueId') uniqueId: string,
+    @Args('reason') reason: string,
+  ) {
+    return this.transfersService.cancel(user, uniqueId, reason);
+  }
+
+  // ── issues / returns ──
+  @Query(() => [StockDocumentEntity])
+  stockDocuments(
+    @AuthUser() user: CurrentUser,
+    @Args('storeUniqueId', { nullable: true }) storeUniqueId?: string,
+    @Args('type', { type: () => StockDocType, nullable: true })
+    type?: StockDocType,
+  ) {
+    return this.issuesService.list(user, storeUniqueId, type);
+  }
+
+  @Query(() => StockDocumentEntity)
+  stockDocument(
+    @AuthUser() user: CurrentUser,
+    @Args('uniqueId') uniqueId: string,
+  ) {
+    return this.issuesService.get(user, uniqueId);
+  }
+
+  @Mutation(() => StockDocumentEntity, {
+    description: 'Issue voucher or return note',
+  })
+  createStockDocument(
+    @AuthUser() user: CurrentUser,
+    @Args('input') input: CreateStockDocumentInput,
+  ) {
+    return this.issuesService.create(user, input);
+  }
 
   // ── stores ──
   @Query(() => [StoreEntity])
@@ -107,6 +203,17 @@ export class StoreResolver {
       page ?? 1,
       limit ?? 50,
     );
+  }
+
+  @Query(() => [StockBalanceEntity], {
+    description: 'Where a quantity product sits in a store (location, batch)',
+  })
+  stockBalances(
+    @AuthUser() user: CurrentUser,
+    @Args('storeUniqueId') storeUniqueId: string,
+    @Args('productUniqueId') productUniqueId: string,
+  ) {
+    return this.assetsService.balances(user, storeUniqueId, productUniqueId);
   }
 
   // ── assets ──

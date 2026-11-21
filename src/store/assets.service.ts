@@ -304,6 +304,78 @@ export class AssetsService {
     return this.get(actor, uniqueId);
   }
 
+  /** Missing assets that stay missing are marked lost (then disposal / write-off). */
+  async markLost(actor: CurrentUser, uniqueId: string, reason: string) {
+    const a = await this.load({ uniqueId });
+    await this.access.assert(actor, 'store.manage');
+    if (a.status !== 'MISSING')
+      throw new BadRequestException('errors.asset_status_change');
+    if (!reason?.trim())
+      throw new BadRequestException('errors.reason_required');
+    await this.prisma.db.$transaction((tx) =>
+      this.ledger.moveAsset(
+        tx,
+        a,
+        { status: 'LOST' },
+        {
+          type: 'ADJUSTMENT',
+          userId: actor.id,
+          referenceType: 'Asset',
+          referenceId: a.tag,
+          reason: `Marked lost: ${reason.trim()}`,
+        },
+      ),
+    );
+    await this.audit.log({
+      action: 'asset.mark_lost',
+      entityType: 'Asset',
+      entityId: a.tag,
+      after: { reason },
+    });
+    return this.get(actor, uniqueId);
+  }
+
+  /** A missing or lost asset turned up: back into its store. */
+  async markFound(
+    actor: CurrentUser,
+    uniqueId: string,
+    locationUniqueId: string,
+    note: string,
+  ) {
+    const a = await this.load({ uniqueId });
+    if (a.status !== 'MISSING' && a.status !== 'LOST') {
+      throw new BadRequestException('errors.asset_status_change');
+    }
+    await this.access.assert(actor, 'stock.adjust', { storeId: a.storeId });
+    const loc = await this.prisma.db.storeLocation.findUnique({
+      where: { uniqueId: locationUniqueId },
+    });
+    if (!loc || loc.storeId !== a.storeId || loc.kind !== 'GENERAL') {
+      throw new BadRequestException('errors.location_not_found');
+    }
+    await this.prisma.db.$transaction((tx) =>
+      this.ledger.moveAsset(
+        tx,
+        a,
+        { status: 'IN_STORE', locationId: loc.id },
+        {
+          type: 'ADJUSTMENT',
+          userId: actor.id,
+          referenceType: 'Asset',
+          referenceId: a.tag,
+          reason: `Found: ${note?.trim() || 'returned to store'}`,
+        },
+      ),
+    );
+    await this.audit.log({
+      action: 'asset.mark_found',
+      entityType: 'Asset',
+      entityId: a.tag,
+      after: { note },
+    });
+    return this.get(actor, uniqueId);
+  }
+
   // ── stock levels ─────────────────────────────────────────────────────────
 
   async levels(user: CurrentUser, f: StockLevelFilterInput = {}) {
@@ -341,7 +413,7 @@ export class AssetsService {
 
     const [balances, assets] = await Promise.all([
       this.prisma.db.stockBalance.groupBy({
-        by: ['storeId', 'productId'],
+        by: ['storeId', 'productId', 'locationId'],
         where: {
           AND: [
             scoped((ids) => ({
@@ -396,8 +468,21 @@ export class AssetsService {
       }
       return e;
     };
+    // In-transit quantities sit on the receiving store's In-transit location.
+    const transitIds = new Set(
+      (
+        await this.prisma.db.storeLocation.findMany({
+          where: { kind: 'IN_TRANSIT' },
+          select: { id: true },
+        })
+      ).map((l) => l.id),
+    );
     for (const b of balances) {
       const e = get(b.storeId, b.productId, false);
+      if (transitIds.has(b.locationId)) {
+        e.inTransit += b._sum.onHand ?? 0;
+        continue;
+      }
       e.onHand += b._sum.onHand ?? 0;
       e.quarantine += b._sum.quarantine ?? 0;
       e.reserved += b._sum.reserved ?? 0;
@@ -472,6 +557,59 @@ export class AssetsService {
           a.store.name.localeCompare(b.store.name) ||
           a.productName.localeCompare(b.productName),
       );
+  }
+
+  /** Quantity balances of a product in a store, per location and batch. */
+  async balances(
+    user: CurrentUser,
+    storeUniqueId: string,
+    productUniqueId: string,
+  ) {
+    const store = await this.stores.byUniqueId(storeUniqueId);
+    const canAct = await Promise.all(
+      (
+        [
+          'stock.issue',
+          'stock.return',
+          'transfer.create',
+          'stock.adjust',
+        ] as const
+      ).map((p) => this.access.can(user, p, { storeId: store.id })),
+    );
+    if (
+      !canAct.some(Boolean) &&
+      !(await this.stores.canSeeStore(user, store.id))
+    ) {
+      throw new ForbiddenException('errors.forbidden');
+    }
+    const product = await this.prisma.db.product.findUnique({
+      where: { uniqueId: productUniqueId },
+    });
+    if (!product) throw new NotFoundException('errors.record_not_found');
+    const [rows, locations] = await Promise.all([
+      this.prisma.db.stockBalance.findMany({
+        where: {
+          storeId: store.id,
+          productId: product.id,
+          location: { kind: 'GENERAL' },
+        },
+        orderBy: [{ expiryDate: 'asc' }, { batchNumber: 'asc' }],
+      }),
+      this.prisma.db.storeLocation.findMany({ where: { storeId: store.id } }),
+    ]);
+    const byId = new Map(locations.map((l) => [l.id, l]));
+    return rows.map((b) => {
+      const loc = byId.get(b.locationId)!;
+      return {
+        locationUniqueId: loc.uniqueId,
+        location: locationPath(loc, locations),
+        batchNumber: b.batchNumber || null,
+        expiryDate: b.expiryDate,
+        onHand: b.onHand,
+        reserved: b.reserved,
+        available: b.onHand - b.reserved,
+      };
+    });
   }
 
   // ── movements ────────────────────────────────────────────────────────────

@@ -578,3 +578,14 @@ export class CreateAdjustmentInput {
   @Field(() => [AdjustmentLineInput])
   lines: AdjustmentLineInput[];
 }
+
+@ObjectType('StockBalance')
+export class StockBalanceEntity {
+  @Field() locationUniqueId: string;
+  @Field() location: string;
+  @Field(() => String, { nullable: true }) batchNumber?: string | null;
+  @Field(() => Date, { nullable: true }) expiryDate?: Date | null;
+  @Field(() => Int) onHand: number;
+  @Field(() => Int) reserved: number;
+  @Field(() => Int) available: number;
+}

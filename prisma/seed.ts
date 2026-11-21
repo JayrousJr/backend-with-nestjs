@@ -268,7 +268,8 @@ async function seedDemo() {
       roles: ['Store Manager', 'Head of Department', 'Staff'],
       user: true,
       hodOf: 'STORE',
-      group: 'STORE_MANAGERS',
+      groups: ['STORE_MANAGERS', 'DISPOSAL_COMMITTEE'],
+      counts: ['MAIN', 'STUDIO'],
     },
   ] as const;
 
@@ -377,9 +378,28 @@ async function seedDemo() {
         });
       }
     }
-    if ('group' in p) {
+    for (const code of 'counts' in p ? p.counts : []) {
+      const counter = await prisma.role.findUniqueOrThrow({
+        where: { name: 'Stock Counter' },
+      });
+      const contextId = storeId.get(code)!;
+      const exists = await prisma.userRole.findFirst({
+        where: { userId: u.id, roleId: counter.id, contextId },
+      });
+      if (!exists) {
+        await prisma.userRole.create({
+          data: {
+            userId: u.id,
+            roleId: counter.id,
+            contextType: 'STORE',
+            contextId,
+          },
+        });
+      }
+    }
+    for (const code of 'groups' in p ? p.groups : []) {
       const group = await prisma.userGroup.findUniqueOrThrow({
-        where: { code: p.group },
+        where: { code },
       });
       await prisma.userGroupMember.upsert({
         where: { groupId_userId: { groupId: group.id, userId: u.id } },

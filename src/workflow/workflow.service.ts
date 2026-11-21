@@ -192,6 +192,32 @@ export class WorkflowService implements OnApplicationBootstrap {
     }
   }
 
+  /**
+   * Emit once the transaction that changed the request has committed:
+   * listeners must see the subject (often created in the same transaction).
+   * The request is polled outside the transaction until its `updatedAt`
+   * reflects the change; if the transaction rolled back, nothing is emitted.
+   */
+  private emitAfterCommit(requestId: number, name: string, payload: object) {
+    const marker = Date.now() - 50;
+    void (async () => {
+      for (let i = 0; i < 100; i++) {
+        const r = await this.prisma.dbRaw.approvalRequest.findUnique({
+          where: { id: requestId },
+          select: { updatedAt: true },
+        });
+        if (r && r.updatedAt.getTime() >= marker) {
+          await this.events.emitAsync(name, payload);
+          return;
+        }
+        await new Promise((res) => setTimeout(res, 100));
+      }
+      this.logger.warn(
+        `${name} for request #${requestId} dropped (not committed)`,
+      );
+    })();
+  }
+
   /** Modules register extra checks for their point (SoD rules). */
   registerGuard(pointCode: string, guard: DecisionGuard) {
     this.guards.set(pointCode, guard);
@@ -293,9 +319,7 @@ export class WorkflowService implements OnApplicationBootstrap {
           step.order ===
           Math.min(...(req.version?.steps ?? []).map((x) => x.order)),
       };
-      setImmediate(
-        () => void this.events.emitAsync(APPROVAL_STEP_OPENED, opened),
-      );
+      this.emitAfterCommit(requestId, APPROVAL_STEP_OPENED, opened);
       if (assignees.length) {
         await db.approvalAssignment.createMany({
           data: assignees.map((userId) => ({
@@ -486,7 +510,7 @@ export class WorkflowService implements OnApplicationBootstrap {
       deciderUserId,
     };
     // Listeners run after the transaction that made the decision.
-    setImmediate(() => void this.events.emitAsync(APPROVAL_COMPLETED, event));
+    this.emitAfterCommit(req.id, APPROVAL_COMPLETED, event);
   }
 
   /**

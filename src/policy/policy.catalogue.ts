@@ -46,6 +46,22 @@ export const POLICY_CATALOGUE = {
     description: 'The author of a product cannot approve its activation',
     enabled: true,
   },
+  SOD_TRANSFER_SELF_RECEIVE: {
+    category: 'SOD',
+    description: 'The dispatcher of a transfer cannot confirm its receipt',
+    enabled: true,
+  },
+  SOD_COUNT_CUSTODIAN: {
+    category: 'SOD',
+    description:
+      "A store's storekeeper cannot be the only counter in its count",
+    enabled: true,
+  },
+  SOD_DISPOSAL_REQUESTER: {
+    category: 'SOD',
+    description: 'The proposer of a disposal cannot give its final approval',
+    enabled: true,
+  },
   SOD_ADJUST_SELF_APPROVE: {
     category: 'SOD',
     description: 'The creator of a stock adjustment cannot approve it',

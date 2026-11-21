@@ -728,6 +728,8 @@ model ApprovalRequest {
   currentStepOrder    Int?                  @map("current_step_order")
   context             Json?
   createdAt           DateTime              @default(now()) @map("created_at")
+  /// Bumped on every change; workflow events wait for it after commit.
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
   completedAt         DateTime?             @map("completed_at")
 
   point       ApprovalPoint         @relation(fields: [pointId], references: [id])
@@ -1226,6 +1228,8 @@ model Store {
   balances           StockBalance[]
   settings           StockSetting[]
   adjustments        StockAdjustment[]
+  transfersOut       Transfer[]      @relation("TransferFrom")
+  transfersIn        Transfer[]      @relation("TransferTo")
 
   createdById Int? @map("created_by_id")
   updatedById Int? @map("updated_by_id")
@@ -1281,6 +1285,8 @@ model StockSetting {
   reorderLevel      Int  @default(0) @map("reorder_level")
   maxLevel          Int? @map("max_level")
   defaultLocationId Int? @map("default_location_id")
+  /// Last reorder alert; cleared when available rises above the level.
+  alertedAt DateTime? @map("alerted_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   store   Store   @relation(fields: [storeId], references: [id])
@@ -1566,4 +1572,301 @@ model StockAdjustmentLine {
 
   @@index([adjustmentId])
   @@map("stock_adjustment_lines")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  B2 §5 — Store transfers
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum TransferStatus {
+  /// Waiting for transfer.approval (no steps by default).
+  REQUESTED
+  /// Approved; stock reserved at the sending store.
+  APPROVED
+  /// In transit.
+  DISPATCHED
+  /// Received short; waiting for transfer_discrepancy.approval.
+  DISCREPANCY
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum TransferReason {
+  RESTOCK
+  DELIVERY
+  PRODUCTION
+  CONSOLIDATION
+  REPAIR
+}
+
+model Transfer {
+  id       Int            @id @default(autoincrement())
+  uniqueId String         @unique @default(uuid(7)) @map("unique_id")
+  number   String         @unique
+  fromStoreId Int         @map("from_store_id")
+  toStoreId   Int         @map("to_store_id")
+  reason   TransferReason
+  note     String?
+  status   TransferStatus @default(REQUESTED)
+  requestedByUserId  Int  @map("requested_by_user_id")
+  approvalRequestId  Int? @map("approval_request_id")
+  /// Set when reserving / posting failed (shown on the document).
+  problem  String?
+  dispatchedByUserId Int? @map("dispatched_by_user_id")
+  dispatchedAt       DateTime? @map("dispatched_at")
+  carriedBy          String?   @map("carried_by")
+  vehicleAssetId     Int?      @map("vehicle_asset_id")
+  expectedArrival    DateTime? @map("expected_arrival")
+  receivedByUserId   Int?      @map("received_by_user_id")
+  receivedAt         DateTime? @map("received_at")
+  discrepancyNote    String?   @map("discrepancy_note")
+  discrepancyRequestId Int?    @map("discrepancy_request_id")
+  remindedAt         DateTime? @map("reminded_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  fromStore Store          @relation("TransferFrom", fields: [fromStoreId], references: [id])
+  toStore   Store          @relation("TransferTo", fields: [toStoreId], references: [id])
+  lines     TransferLine[]
+
+  @@index([status])
+  @@index([fromStoreId, status])
+  @@index([toStoreId, status])
+  @@map("transfers")
+}
+
+model TransferLine {
+  id             Int     @id @default(autoincrement())
+  transferId     Int     @map("transfer_id")
+  lineNo         Int     @map("line_no")
+  productId      Int     @map("product_id")
+  /// Serialised: the asset (kits travel with their components).
+  assetId        Int?    @map("asset_id")
+  quantity       Int
+  batchNumber    String? @map("batch_number")
+  fromLocationId Int?    @map("from_location_id")
+  /// Reserved at approval (quantity lines).
+  reserved       Int     @default(0)
+  dispatchedQty  Int?    @map("dispatched_qty")
+  dispatchCondition AssetCondition? @map("dispatch_condition")
+  receivedQty    Int?    @map("received_qty")
+  receivedCondition AssetCondition? @map("received_condition")
+  toLocationId   Int?    @map("to_location_id")
+  note           String?
+
+  transfer Transfer @relation(fields: [transferId], references: [id])
+
+  @@index([transferId])
+  @@map("transfer_lines")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  B2 §4 — Issues (consumables) and returns to store
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum StockDocType {
+  ISSUE
+  RETURN
+}
+
+enum BeneficiaryType {
+  DEPARTMENT
+  EMPLOYEE
+  PRODUCTION
+}
+
+/// Issue voucher / return note. Quantity products only; assets go through
+/// handover (B3) or production checkout (Module 04).
+model StockDocument {
+  id       Int          @id @default(autoincrement())
+  uniqueId String       @unique @default(uuid(7)) @map("unique_id")
+  number   String       @unique
+  type     StockDocType
+  storeId  Int          @map("store_id")
+  beneficiaryType BeneficiaryType @map("beneficiary_type")
+  departmentId    Int?   @map("department_id")
+  employeeId      Int?   @map("employee_id")
+  /// Production reference until Module 01 exists.
+  productionRef   String? @map("production_ref")
+  /// e.g. internal request number (B1 §6).
+  reference String?
+  note      String?
+  userId    Int      @map("user_id")
+  at        DateTime @default(now())
+
+  lines StockDocumentLine[]
+
+  @@index([storeId, at])
+  @@map("stock_documents")
+}
+
+model StockDocumentLine {
+  id          Int     @id @default(autoincrement())
+  documentId  Int     @map("document_id")
+  lineNo      Int     @map("line_no")
+  productId   Int     @map("product_id")
+  locationId  Int     @map("location_id")
+  batchNumber String? @map("batch_number")
+  quantity    Int
+
+  document StockDocument @relation(fields: [documentId], references: [id])
+
+  @@index([documentId])
+  @@map("stock_document_lines")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  B2 §8 — Stock counts
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum CountScope {
+  FULL
+  LOCATION
+  CATEGORY
+}
+
+enum CountStatus {
+  /// Movements frozen for the counted locations; blind counting open.
+  COUNTING
+  IN_APPROVAL
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model StockCount {
+  id          Int         @id @default(autoincrement())
+  uniqueId    String      @unique @default(uuid(7)) @map("unique_id")
+  number      String      @unique
+  storeId     Int         @map("store_id")
+  scope       CountScope
+  /// LOCATION scope: the counted locations.
+  locationIds Int[]       @default([]) @map("location_ids")
+  /// CATEGORY scope.
+  categoryId  Int?        @map("category_id")
+  status      CountStatus @default(COUNTING)
+  note        String?
+  createdByUserId   Int   @map("created_by_user_id")
+  approvalRequestId Int?  @map("approval_request_id")
+  submittedAt DateTime?   @map("submitted_at")
+  postedAt    DateTime?   @map("posted_at")
+  postError   String?     @map("post_error")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  lines StockCountLine[]
+
+  @@index([storeId, status])
+  @@map("stock_counts")
+}
+
+model StockCountLine {
+  id          Int      @id @default(autoincrement())
+  countId     Int      @map("count_id")
+  productId   Int      @map("product_id")
+  assetId     Int?     @map("asset_id")
+  locationId  Int      @map("location_id")
+  batchNumber String?  @map("batch_number")
+  /// Snapshot at the start (hidden from counters: blind count).
+  expectedQty Int      @map("expected_qty")
+  countedQty  Int?     @map("counted_qty")
+  /// Asset scanned but not on the expected list.
+  unexpected  Boolean  @default(false)
+  countedByUserId Int? @map("counted_by_user_id")
+  countedAt   DateTime? @map("counted_at")
+  note        String?
+
+  count StockCount @relation(fields: [countId], references: [id])
+
+  @@index([countId])
+  @@map("stock_count_lines")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  B2 §10 — Maintenance
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum MaintenanceStatus {
+  OPEN
+  IN_REPAIR
+  AT_VENDOR
+  COMPLETED
+  CANCELLED
+}
+
+enum MaintenanceSource {
+  FAULT_REPORT
+  PRODUCTION_RETURN
+  STOCK_COUNT
+  TRANSFER_RECEIPT
+  SCHEDULED
+  OTHER
+}
+
+model MaintenanceTicket {
+  id          Int               @id @default(autoincrement())
+  uniqueId    String            @unique @default(uuid(7)) @map("unique_id")
+  number      String            @unique
+  assetId     Int               @map("asset_id")
+  source      MaintenanceSource
+  description String
+  status      MaintenanceStatus @default(OPEN)
+  /// Internal repair by the owning department, or external by a vendor.
+  external    Boolean           @default(false)
+  vendorName  String?           @map("vendor_name")
+  underWarranty Boolean         @default(false) @map("under_warranty")
+  /// Null when opened by the system (scheduled service).
+  openedByUserId Int?           @map("opened_by_user_id")
+  /// Asset status before the ticket took it out of service.
+  previousStatus AssetStatus?   @map("previous_status")
+  startedAt   DateTime?         @map("started_at")
+  sentOutAt   DateTime?         @map("sent_out_at")
+  backAt      DateTime?         @map("back_at")
+  completedAt DateTime?         @map("completed_at")
+  completedByUserId Int?        @map("completed_by_user_id")
+  outcome     String?
+  outcomeCondition AssetCondition? @map("outcome_condition")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  @@index([assetId])
+  @@index([status])
+  @@map("maintenance_tickets")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  B2 §6.1 — Disposal
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum DisposalStatus {
+  IN_APPROVAL
+  APPROVED
+  RETURNED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+model Disposal {
+  id          Int            @id @default(autoincrement())
+  uniqueId    String         @unique @default(uuid(7)) @map("unique_id")
+  number      String         @unique
+  assetId     Int            @map("asset_id")
+  reason      String
+  /// Proposed method: scrap, sale, donation, destruction, write-off (lost)…
+  method      String
+  status      DisposalStatus @default(IN_APPROVAL)
+  previousStatus AssetStatus @map("previous_status")
+  proposedByUserId  Int      @map("proposed_by_user_id")
+  approvalRequestId Int?     @map("approval_request_id")
+  completedAt DateTime?      @map("completed_at")
+  completedByUserId Int?     @map("completed_by_user_id")
+  completionNote String?     @map("completion_note")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  @@index([assetId])
+  @@index([status])
+  @@map("disposals")
 }

@@ -156,7 +156,7 @@ export class AuthService {
     }
 
     const required = await this.twoFactor.isRequired(user.id);
-    if (user.twoFactorEnabled || required) {
+    if ((user.twoFactorEnabled || required) && !this.config.devDisable2fa) {
       const challengeToken = await this.jwt.signAsync(
         { sub: user.uniqueId, typ: '2fa' },
         { secret: this.config.jwtAccess.secret, expiresIn: CHALLENGE_TTL },

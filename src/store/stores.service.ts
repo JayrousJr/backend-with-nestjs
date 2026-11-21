@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Prisma, StoreLocation } from '@db';
-import { PrismaService } from '@prisma';
+import { PrismaService, type DbTx } from '@prisma';
 import type { CurrentUser } from '@common';
 import { AccessService } from '@access';
 import { AuditService } from '../audit/audit.service';
@@ -24,6 +24,20 @@ const SYSTEM_LOCATIONS = {
   ],
   SUB: [{ code: 'TRANSIT', name: 'In transit', kind: 'IN_TRANSIT' }],
 } as const;
+
+/**
+ * Storekeepers (custodians) of a store: a role in the store's context that
+ * issues, receives or returns stock. Count-only roles are not custodians
+ * (SOD_COUNT_CUSTODIAN).
+ */
+const CUSTODIAN_ROLE: Prisma.RoleWhereInput = {
+  isActive: true,
+  grants: {
+    some: {
+      permissionCode: { in: ['stock.issue', 'stock.receive', 'stock.return'] },
+    },
+  },
+};
 
 export interface StockScope {
   all: boolean;
@@ -91,7 +105,11 @@ export class StoresService {
 
   private async storekeepers(storeIds: number[]) {
     const roles = await this.prisma.db.userRole.findMany({
-      where: { contextType: 'STORE', contextId: { in: storeIds } },
+      where: {
+        contextType: 'STORE',
+        contextId: { in: storeIds },
+        role: CUSTODIAN_ROLE,
+      },
       include: { user: { include: { employee: true } } },
     });
     const by = new Map<
@@ -111,6 +129,33 @@ export class StoresService {
       by.set(r.contextId, list);
     }
     return by;
+  }
+
+  /** Active users holding a role in the store's context (storekeepers). */
+  async keeperUserIds(storeId: number): Promise<number[]> {
+    const roles = await this.prisma.db.userRole.findMany({
+      where: {
+        contextType: 'STORE',
+        contextId: storeId,
+        user: { status: 'ACTIVE' },
+        role: CUSTODIAN_ROLE,
+      },
+      select: { userId: true },
+    });
+    return [...new Set(roles.map((r) => r.userId))];
+  }
+
+  /** A store's system location of a kind (RECEIVING, REJECTED, IN_TRANSIT). */
+  async systemLocation(
+    storeId: number,
+    kind: 'RECEIVING' | 'REJECTED' | 'IN_TRANSIT',
+    tx?: DbTx,
+  ) {
+    const loc = await (tx ?? this.prisma.db).storeLocation.findFirst({
+      where: { storeId, kind },
+    });
+    if (!loc) throw new BadRequestException('errors.location_not_found');
+    return loc;
   }
 
   async list(user: CurrentUser, includeInactive = false) {

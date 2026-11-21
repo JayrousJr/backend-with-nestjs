@@ -33,6 +33,46 @@ export class LedgerService {
     private readonly numbering: NumberingService,
   ) {}
 
+  /**
+   * Stock counts freeze movements for what they count (B2 §8): the whole
+   * store, the counted locations, or the counted category. Postings of the
+   * count itself pass.
+   */
+  async assertNotFrozen(
+    tx: DbTx,
+    storeId: number,
+    locationId: number,
+    productId: number,
+    ref: { referenceType?: string },
+  ) {
+    if (ref.referenceType === 'StockCount') return;
+    const counts = await tx.stockCount.findMany({
+      where: { storeId, status: 'COUNTING' },
+    });
+    if (!counts.length) return;
+    let categoryId: number | null | undefined;
+    for (const c of counts) {
+      let frozen = c.scope === 'FULL';
+      if (c.scope === 'LOCATION') frozen = c.locationIds.includes(locationId);
+      if (c.scope === 'CATEGORY') {
+        if (categoryId === undefined) {
+          const p = await tx.product.findUnique({
+            where: { id: productId },
+            include: { currentVersion: true },
+          });
+          categoryId = p?.currentVersion?.categoryId ?? null;
+        }
+        frozen = categoryId != null && categoryId === c.categoryId;
+      }
+      if (frozen) {
+        throw new BadRequestException({
+          message: 'errors.stock_count_frozen',
+          args: { number: c.number },
+        });
+      }
+    }
+  }
+
   /** Issue `count` new tags in a category series (printed before tagging). */
   async issueTags(
     prefix: string,
@@ -75,6 +115,13 @@ export class LedgerService {
     delta: number,
     ref: TxnRef,
   ) {
+    await this.assertNotFrozen(
+      tx,
+      at.storeId,
+      at.locationId,
+      at.productId,
+      ref,
+    );
     if (!delta) return;
     const key = {
       storeId: at.storeId,
@@ -119,6 +166,83 @@ export class LedgerService {
     });
   }
 
+  /** Reserve available quantity (on hand − reserved) at a location. */
+  async reserveQuantity(
+    tx: DbTx,
+    at: {
+      storeId: number;
+      locationId: number;
+      productId: number;
+      batchNumber?: string | null;
+    },
+    qty: number,
+    ref: TxnRef,
+  ) {
+    await this.assertNotFrozen(
+      tx,
+      at.storeId,
+      at.locationId,
+      at.productId,
+      ref,
+    );
+    if (qty <= 0) return;
+    const rows = await tx.$queryRaw<{ id: number }[]>`
+      UPDATE stock_balances SET reserved = reserved + ${qty}, updated_at = now()
+      WHERE store_id = ${at.storeId} AND location_id = ${at.locationId}
+        AND product_id = ${at.productId} AND batch_number = ${at.batchNumber ?? ''}
+        AND on_hand - reserved >= ${qty}
+      RETURNING id`;
+    if (!rows.length)
+      throw new BadRequestException('errors.stock_insufficient');
+    await tx.stockTransaction.create({
+      data: {
+        type: 'RESERVE',
+        userId: ref.userId,
+        storeId: at.storeId,
+        locationId: at.locationId,
+        productId: at.productId,
+        batchNumber: at.batchNumber || null,
+        quantity: 0,
+        referenceType: ref.referenceType,
+        referenceId: ref.referenceId,
+        reason: ref.reason ?? `Reserved ${qty}`,
+      },
+    });
+  }
+
+  /** Release a reservation (never below zero). */
+  async releaseQuantity(
+    tx: DbTx,
+    at: {
+      storeId: number;
+      locationId: number;
+      productId: number;
+      batchNumber?: string | null;
+    },
+    qty: number,
+    ref: TxnRef,
+  ) {
+    if (qty <= 0) return;
+    await tx.$executeRaw`
+      UPDATE stock_balances SET reserved = GREATEST(reserved - ${qty}, 0), updated_at = now()
+      WHERE store_id = ${at.storeId} AND location_id = ${at.locationId}
+        AND product_id = ${at.productId} AND batch_number = ${at.batchNumber ?? ''}`;
+    await tx.stockTransaction.create({
+      data: {
+        type: 'RELEASE',
+        userId: ref.userId,
+        storeId: at.storeId,
+        locationId: at.locationId,
+        productId: at.productId,
+        batchNumber: at.batchNumber || null,
+        quantity: 0,
+        referenceType: ref.referenceType,
+        referenceId: ref.referenceId,
+        reason: ref.reason ?? `Released ${qty}`,
+      },
+    });
+  }
+
   /** Create an asset (stock-in, opening balance, found / donated). */
   async createAsset(
     tx: DbTx,
@@ -127,6 +251,15 @@ export class LedgerService {
     },
     ref: TxnRef,
   ) {
+    if (data.storeId && data.locationId) {
+      await this.assertNotFrozen(
+        tx,
+        data.storeId,
+        data.locationId,
+        data.productId,
+        ref,
+      );
+    }
     const tag = await tx.assetTag.findUniqueOrThrow({
       where: { id: data.tagId },
     });
@@ -167,6 +300,24 @@ export class LedgerService {
     },
     ref: TxnRef,
   ) {
+    if (asset.storeId && asset.locationId) {
+      await this.assertNotFrozen(
+        tx,
+        asset.storeId,
+        asset.locationId,
+        asset.productId,
+        ref,
+      );
+    }
+    if (to.storeId && to.locationId) {
+      await this.assertNotFrozen(
+        tx,
+        to.storeId,
+        to.locationId,
+        asset.productId,
+        ref,
+      );
+    }
     const inStore = (s: AssetStatus) => s === 'IN_STORE' || s === 'RESERVED';
     const status = to.status ?? asset.status;
     const delta = (inStore(status) ? 1 : 0) - (inStore(asset.status) ? 1 : 0);

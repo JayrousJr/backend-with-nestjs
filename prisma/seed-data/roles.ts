@@ -79,6 +79,10 @@ export const SEED_ROLES: SeedRole[] = [
       ['item.approve', 'ASSIGNED'],
       ['stock.view', 'OWN_DEPARTMENT'],
       ['asset.view', 'OWN_DEPARTMENT'],
+      ['maintenance.create', 'OWN_DEPARTMENT'],
+      ['maintenance.update', 'OWN_DEPARTMENT'],
+      ['disposal.propose', 'OWN_DEPARTMENT'],
+      ['disposal.approve', 'ASSIGNED'],
     ],
   },
   {
@@ -134,6 +138,18 @@ export const SEED_ROLES: SeedRole[] = [
       ['asset.tag_print', 'ASSIGNED_STORE'],
       ['disposal.propose', 'ASSIGNED_STORE'],
       ['maintenance.create', 'ASSIGNED_STORE'],
+      ['maintenance.update', 'ASSIGNED_STORE'],
+    ],
+  },
+  {
+    name: 'Stock Counter',
+    description:
+      'Counts stock in the stores assigned to them (B2 §8); not a custodian.',
+    contextType: 'STORE',
+    grants: [
+      ['item.view', 'ALL'],
+      ['stock.view', 'ASSIGNED_STORE'],
+      ['stock_count.count', 'ASSIGNED_STORE'],
     ],
   },
   {
@@ -149,6 +165,9 @@ export const SEED_ROLES: SeedRole[] = [
       ['stock_adjustment.approve', 'ASSIGNED'],
       ['stock_count.approve', 'ASSIGNED'],
       ['transfer.approve', 'ASSIGNED'],
+      ['disposal.approve', 'ASSIGNED'],
+      ['maintenance.create', 'ALL'],
+      ['maintenance.update', 'ALL'],
     ],
   },
   {

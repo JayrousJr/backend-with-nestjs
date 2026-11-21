@@ -18,6 +18,12 @@ stores and locations, stock levels, asset tags with QR, the asset register incl.
 kits and vehicles, an append-only stock ledger, stock adjustments through
 `stock_adjustment.approval`, the opening-balance / tagging-campaign import, and
 B2 reports).
+Store operations: transfers (reserve → dispatch → in transit → receive → discrepancy approval),
+issues/returns, reorder alerts, stock counts (blind, movements frozen, `stock_count.approval`),
+maintenance (internal / vendor, scheduled vehicle services, document-expiry reminders) and disposal
+(`disposal.approval`: owning-department HOD → Disposal Committee).
+
+Development: `DEV_DISABLE_2FA=true` in `.env` skips the 2FA step at login (ignored in production).
 
 ## Quick start (local)
 

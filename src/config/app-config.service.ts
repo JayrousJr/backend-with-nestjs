@@ -13,6 +13,13 @@ export class AppConfigService {
     return this.config.get<string>('NODE_ENV', 'development');
   }
 
+  /** Development only: skip 2FA at login. Never honoured in production. */
+  get devDisable2fa(): boolean {
+    return (
+      !this.isProduction && this.config.get<boolean>('DEV_DISABLE_2FA') === true
+    );
+  }
+
   get isProduction(): boolean {
     return this.nodeEnv === 'production';
   }
