@@ -34,6 +34,12 @@ import { OpeningBalanceController } from './store.controller';
     StoreResolver,
     StoreOpsResolver,
   ],
-  exports: [StoresService, LedgerService, AssetsService, ReorderService],
+  exports: [
+    StoresService,
+    LedgerService,
+    AssetsService,
+    ReorderService,
+    MaintenanceService,
+  ],
 })
 export class StoreModule {}

@@ -21,6 +21,17 @@ export interface CodeEmailJob {
   validFor: number;
 }
 
+/** Pre-written email (texts already in the recipient's language). */
+export interface GenericEmailJob {
+  email: string;
+  subject: string;
+  greeting: string;
+  body: string;
+  url?: string;
+  cta?: string;
+  footer?: string;
+}
+
 const RETRY = {
   attempts: 3,
   backoff: { type: 'exponential', delay: 1000 },
@@ -36,6 +47,10 @@ export class MailService {
 
   async queuePasswordResetEmail(data: LinkEmailJob): Promise<void> {
     await this.queue.add('password-reset-email', data, RETRY);
+  }
+
+  async queueGeneric(data: GenericEmailJob): Promise<void> {
+    await this.queue.add('generic', data, RETRY);
   }
 
   async queueTwoFactorCode(data: CodeEmailJob): Promise<void> {

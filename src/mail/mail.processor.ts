@@ -6,7 +6,7 @@ import * as nodemailer from 'nodemailer';
 import { I18nService } from 'nestjs-i18n';
 import { AppConfigService } from '@config';
 import { MAIL_QUEUE } from './mail.constants';
-import { CodeEmailJob, LinkEmailJob } from './mail.service';
+import { CodeEmailJob, GenericEmailJob, LinkEmailJob } from './mail.service';
 import { linkEmailTemplate } from './templates/link-email.template';
 
 interface MailPayload {
@@ -71,7 +71,23 @@ export class MailProcessor extends WorkerHost {
     return this.i18n.translate(key, { lang, args });
   }
 
-  async process(job: Job<LinkEmailJob | CodeEmailJob>): Promise<void> {
+  async process(
+    job: Job<LinkEmailJob | CodeEmailJob | GenericEmailJob>,
+  ): Promise<void> {
+    if (job.name === 'generic') {
+      const d = job.data as GenericEmailJob;
+      const { html, text } = linkEmailTemplate({
+        url: d.url ?? '',
+        greeting: d.greeting,
+        body: d.body,
+        cta: d.cta ?? d.url ?? '',
+        expiry: d.footer ?? '',
+        ignore: '',
+      });
+      await this.sendMail({ to: d.email, subject: d.subject, html, text });
+      this.logger.log(`Sent generic email to ${d.email}`);
+      return;
+    }
     if (job.name === 'two-factor-code') {
       return this.processCode(job as Job<CodeEmailJob>);
     }

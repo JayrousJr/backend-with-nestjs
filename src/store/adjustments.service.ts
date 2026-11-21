@@ -14,7 +14,7 @@ import type {
   AssetCondition,
   Prisma,
 } from '@db';
-import { PrismaService, type DbTx } from '@prisma';
+import { anyOf, PrismaService, type DbTx } from '@prisma';
 import type { CurrentUser } from '@common';
 import { AccessService } from '@access';
 import { AuditService } from '../audit/audit.service';
@@ -679,7 +679,7 @@ export class AdjustmentsService implements OnModuleInit {
     const rows = await this.prisma.db.stockAdjustment.findMany({
       where: {
         AND: [
-          { OR: or },
+          anyOf(or),
           storeUniqueId ? { store: { uniqueId: storeUniqueId } } : {},
           status ? { status } : {},
         ],

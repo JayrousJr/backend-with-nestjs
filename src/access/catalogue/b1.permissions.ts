@@ -39,4 +39,49 @@ export const B1_PERMISSIONS = definePermissions('B1', {
     scopes: ['ALL'],
     description: 'Product categories and their receiving-criteria library',
   },
+  'internal_request.view': {
+    scopes: ['ALL', 'OWN_DEPARTMENT', 'OWN_RECORDS'],
+    description:
+      'View internal requests (own department = requesting or owning)',
+  },
+  'internal_request.create': {
+    scopes: ['OWN_DEPARTMENT'],
+    description: 'Raise internal requests for the department or its employees',
+  },
+  'internal_request.submit': {
+    scopes: ['OWN_DEPARTMENT'],
+    description: 'Submit internal requests',
+  },
+  'internal_request.cancel': {
+    scopes: ['OWN_DEPARTMENT'],
+    description: 'Cancel internal requests before delivery',
+  },
+  'internal_request.accept': {
+    scopes: ['ASSIGNED'],
+    description: 'Accept (fully or partially) as the owning department',
+  },
+  'internal_request.fulfil': {
+    scopes: ['OWN_DEPARTMENT'],
+    description: 'Plan fulfilment (from store / purchase) for own products',
+  },
+  'purchase_request.view': {
+    scopes: ['ALL', 'OWN_DEPARTMENT'],
+    description: 'View purchase requests',
+  },
+  'purchase_request.create': {
+    scopes: ['OWN_DEPARTMENT'],
+    description: 'Raise purchase requests for own products',
+  },
+  'purchase_request.submit': {
+    scopes: ['OWN_DEPARTMENT'],
+    description: 'Submit purchase requests',
+  },
+  'purchase_request.cancel': {
+    scopes: ['OWN_DEPARTMENT'],
+    description: 'Cancel purchase requests before approval',
+  },
+  'purchase_request.approve': {
+    scopes: ['ASSIGNED'],
+    description: 'Decide purchase request steps (CEO, Procurement)',
+  },
 });

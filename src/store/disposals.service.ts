@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { AssetStatus, DisposalStatus, Prisma } from '@db';
-import { PrismaService } from '@prisma';
+import { anyOf, PrismaService } from '@prisma';
 import type { CurrentUser } from '@common';
 import { AccessService } from '@access';
 import { AuditService } from '../audit/audit.service';
@@ -288,7 +288,7 @@ export class DisposalsService implements OnModuleInit {
     if (propose.storeIds.length) or.push({ storeId: { in: propose.storeIds } });
     const assets = or.length
       ? await this.prisma.db.asset.findMany({
-          where: { OR: or },
+          where: anyOf(or),
           select: { id: true },
         })
       : [];

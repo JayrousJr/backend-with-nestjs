@@ -62,6 +62,22 @@ export const POLICY_CATALOGUE = {
     description: 'The proposer of a disposal cannot give its final approval',
     enabled: true,
   },
+  SOD_HANDOVER_SELF: {
+    category: 'SOD',
+    description: 'A storekeeper cannot hand over an item to themselves',
+    enabled: true,
+  },
+  SOD_RETURN_SELF: {
+    category: 'SOD',
+    description: 'A storekeeper cannot receive the return of an item they hold',
+    enabled: true,
+  },
+  SOD_LOSS_SELF_APPROVE: {
+    category: 'SOD',
+    description:
+      'The custodian cannot approve the loss report or responsibility decision about their own item',
+    enabled: true,
+  },
   SOD_ADJUST_SELF_APPROVE: {
     category: 'SOD',
     description: 'The creator of a stock adjustment cannot approve it',

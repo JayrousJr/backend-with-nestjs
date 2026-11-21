@@ -89,6 +89,13 @@ async function main() {
         code: c.code,
         name: c.name,
         tagPrefix: c.tagPrefix,
+        inspectionMonths: ['CAM', 'AUD', 'LGT'].includes(c.code)
+          ? 6
+          : c.code === 'ICT'
+            ? 12
+            : null,
+        termsOfUse:
+          'I confirm I received the items listed in the condition shown. I will use them for AzamTV work only, keep them safe, report any fault, damage, loss or theft at once, and return them when asked or when I leave AzamTV.',
         criteria: {
           create: c.criteria.map((text, i) => ({ text, sortOrder: i })),
         },
@@ -139,6 +146,7 @@ async function seedDemo() {
     ['PROC_OFFICER', 'Procurement Officer'],
     ['STOREKEEPER', 'Storekeeper'],
     ['STORE_MGR', 'Store Manager'],
+    ['CEO', 'Chief Executive Officer'],
   ];
   const titleId = new Map<string, number>();
   for (const [code, name] of titles) {
@@ -270,6 +278,18 @@ async function seedDemo() {
       hodOf: 'STORE',
       groups: ['STORE_MANAGERS', 'DISPOSAL_COMMITTEE'],
       counts: ['MAIN', 'STUDIO'],
+    },
+    {
+      number: 'AZ0011',
+      first: 'Zuberi',
+      last: 'Kassim',
+      gender: 'MALE',
+      email: `ceo@${domain}`,
+      dept: 'MGT',
+      title: 'CEO',
+      roles: ['CEO', 'Staff'],
+      user: true,
+      hodOf: 'MGT',
     },
   ] as const;
 

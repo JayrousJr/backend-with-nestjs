@@ -1119,6 +1119,219 @@ export class ReportsService {
         };
       },
     },
+    'custody-register': {
+      name: 'Items in custody',
+      description:
+        'Items held by employees, by custodian and department, with unacknowledged, overdue-return and inspection-due flags',
+      permission: 'custody.view',
+      build: async (user) => {
+        const s = await this.access.resolveScope(user, 'custody.view');
+        const emps = s.all
+          ? null
+          : await this.prisma.db.employee.findMany({
+              where: {
+                OR: [
+                  { departmentId: { in: s.departmentIds } },
+                  { id: user.employeeId ?? -1 },
+                ],
+              },
+              select: { id: true },
+            });
+        const rows = await this.prisma.db.custody.findMany({
+          where: {
+            toAt: null,
+            ...(emps
+              ? { custodianEmployeeId: { in: emps.map((e) => e.id) } }
+              : {}),
+          },
+          orderBy: { fromAt: 'asc' },
+        });
+        const [assets, employees, handovers, inspections] = await Promise.all([
+          this.prisma.db.asset.findMany({
+            where: { id: { in: rows.map((r) => r.assetId) } },
+            include: { version: { include: { category: true } } },
+          }),
+          this.prisma.db.employee.findMany({
+            where: { id: { in: rows.map((r) => r.custodianEmployeeId) } },
+            include: { department: true },
+          }),
+          this.prisma.db.handover.findMany({
+            where: { id: { in: rows.map((r) => r.handoverId) } },
+          }),
+          this.prisma.db.assetInspection.findMany({
+            where: { assetId: { in: rows.map((r) => r.assetId) } },
+            orderBy: { at: 'desc' },
+          }),
+        ]);
+        const by = <T extends { id: number }>(l: T[]) =>
+          new Map(l.map((x) => [x.id, x]));
+        const [aB, eB, hB] = [by(assets), by(employees), by(handovers)];
+        const now = Date.now();
+        return {
+          title: 'Items in custody',
+          columns: [
+            { header: 'Department', width: 20 },
+            { header: 'Employee no.', width: 12 },
+            { header: 'Custodian', width: 24 },
+            { header: 'Tag', width: 18 },
+            { header: 'Product', width: 30 },
+            { header: 'Condition', width: 14 },
+            { header: 'Since', width: 12, format: 'date' },
+            { header: 'Handover', width: 16 },
+            { header: 'Acknowledged', width: 12 },
+            { header: 'Return by', width: 12, format: 'date' },
+            { header: 'Overdue', width: 9 },
+            { header: 'Next inspection', width: 14, format: 'date' },
+          ],
+          rows: rows.map((c) => {
+            const a = aB.get(c.assetId)!;
+            const e = eB.get(c.custodianEmployeeId)!;
+            const h = hB.get(c.handoverId);
+            const months = a.version.category.inspectionMonths;
+            let next: Date | null = null;
+            if (months && !a.parentAssetId) {
+              next = new Date(
+                inspections.find((i) => i.assetId === a.id)?.at ?? c.fromAt,
+              );
+              next.setMonth(next.getMonth() + months);
+            }
+            return [
+              e.department.name,
+              e.employeeNumber,
+              fullName(e),
+              a.tag,
+              a.version.name,
+              a.condition,
+              c.fromAt,
+              h?.number,
+              h?.acknowledgedAt ? 'Yes' : 'No',
+              h?.expectedReturnDate,
+              h?.expectedReturnDate && h.expectedReturnDate.getTime() < now
+                ? 'Yes'
+                : '',
+              next,
+            ];
+          }),
+        };
+      },
+    },
+    'handover-register': {
+      name: 'Handover register',
+      description:
+        'Every handover with source request, custodian, status and acknowledgement method',
+      permission: 'handover.view',
+      build: async (user) => {
+        const s = await this.access.resolveScope(user, 'handover.view');
+        const rows = await this.prisma.db.handover.findMany({
+          where: s.all
+            ? {}
+            : {
+                OR: [
+                  { custodianDepartmentId: { in: s.departmentIds } },
+                  { custodianEmployeeId: user.employeeId ?? -1 },
+                ],
+              },
+          include: { lines: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        const [emps, stores] = await Promise.all([
+          this.prisma.db.employee.findMany({
+            where: { id: { in: rows.map((r) => r.custodianEmployeeId) } },
+          }),
+          this.prisma.db.store.findMany(),
+        ]);
+        const eB = new Map(emps.map((e) => [e.id, e]));
+        const sB = new Map(stores.map((x) => [x.id, x.name]));
+        return {
+          title: 'Handover register',
+          columns: [
+            { header: 'Number', width: 16 },
+            { header: 'Date', width: 16, format: 'datetime' },
+            { header: 'Custodian', width: 24 },
+            { header: 'Store', width: 18 },
+            { header: 'Source', width: 18 },
+            { header: 'Reference', width: 16 },
+            { header: 'Items', width: 8 },
+            { header: 'Status', width: 22 },
+            { header: 'Acknowledged', width: 16, format: 'datetime' },
+            { header: 'Method', width: 14 },
+          ],
+          rows: rows.map((h) => [
+            h.number,
+            h.createdAt,
+            fullName(eB.get(h.custodianEmployeeId)!),
+            sB.get(h.storeId),
+            h.source,
+            h.sourceRef,
+            h.lines.length,
+            h.status,
+            h.acknowledgedAt,
+            h.ackMethod,
+          ]),
+        };
+      },
+    },
+    'asset-incidents': {
+      name: 'Fault, damage, loss and theft reports',
+      description:
+        'Reports with their status and the responsibility decision (no amounts)',
+      permission: 'custody.view',
+      build: async () => {
+        const rows = await this.prisma.db.assetReport.findMany({
+          orderBy: { createdAt: 'desc' },
+        });
+        const [assets, emps] = await Promise.all([
+          this.prisma.db.asset.findMany({
+            where: { id: { in: rows.map((r) => r.assetId) } },
+            include: { version: true },
+          }),
+          this.prisma.db.employee.findMany({
+            where: {
+              id: {
+                in: rows
+                  .map((r) => r.custodianEmployeeId)
+                  .filter((x): x is number => !!x),
+              },
+            },
+          }),
+        ]);
+        const aB = new Map(assets.map((a) => [a.id, a]));
+        const eB = new Map(emps.map((e) => [e.id, e]));
+        return {
+          title: 'Fault, damage, loss and theft reports',
+          columns: [
+            { header: 'Number', width: 16 },
+            { header: 'Type', width: 10 },
+            { header: 'Occurred', width: 16, format: 'datetime' },
+            { header: 'Tag', width: 18 },
+            { header: 'Product', width: 28 },
+            { header: 'Custodian', width: 24 },
+            { header: 'Status', width: 12 },
+            { header: 'Responsibility', width: 20 },
+            { header: 'Decision status', width: 14 },
+            { header: 'Circumstances', width: 50 },
+          ],
+          rows: rows.map((r) => {
+            const a = aB.get(r.assetId)!;
+            const e = r.custodianEmployeeId
+              ? eB.get(r.custodianEmployeeId)
+              : undefined;
+            return [
+              r.number,
+              r.type,
+              r.occurredAt,
+              a.tag,
+              a.version.name,
+              e ? fullName(e) : null,
+              r.status,
+              r.responsibility,
+              r.responsibilityStatus,
+              r.circumstances,
+            ];
+          }),
+        };
+      },
+    },
     'vehicle-documents': {
       name: 'Vehicles with expiring documents',
       description:

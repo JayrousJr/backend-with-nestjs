@@ -163,4 +163,131 @@ export const APPROVAL_POINTS: Record<string, ApprovalPointDefinition> = {
       },
     ],
   },
+  'internal_request.approval': {
+    module: 'B1',
+    name: 'Internal request',
+    description:
+      'Acceptance by the owning department (skipped when the requesting department owns the product)',
+    permission: 'internal_request.accept',
+    defaultSteps: [
+      {
+        code: 'owning_dept_acceptance',
+        name: 'Owning department acceptance',
+        approverType: 'RULE',
+        approver: 'HOD_OF_SUBJECT_DEPARTMENT',
+        mode: 'ANY',
+        allowDelegation: true,
+      },
+    ],
+  },
+  'purchase_request.approval': {
+    module: 'B1',
+    name: 'Purchase request',
+    description:
+      'CEO review → Procurement review → CEO decision (no budget shown)',
+    permission: 'purchase_request.approve',
+    defaultSteps: [
+      {
+        code: 'ceo_review',
+        name: 'CEO review',
+        approverType: 'ROLE',
+        approver: 'CEO',
+        mode: 'ANY',
+        allowDelegation: false,
+      },
+      {
+        code: 'procurement_review',
+        name: 'Procurement review',
+        approverType: 'ROLE',
+        approver: 'Procurement Officer',
+        mode: 'ANY',
+        allowDelegation: true,
+      },
+      {
+        code: 'ceo_decision',
+        name: 'CEO decision',
+        approverType: 'ROLE',
+        approver: 'CEO',
+        mode: 'ANY',
+        allowDelegation: false,
+      },
+    ],
+  },
+  'handover.approval': {
+    module: 'B3',
+    name: 'Handover',
+    description:
+      'Handover to a custodian. No steps by default (the request was approved).',
+    defaultSteps: [],
+  },
+  'custody_transfer.approval': {
+    module: 'B3',
+    name: 'Custody transfer',
+    description:
+      'Moving items from one employee to another (HOD of the receiving employee)',
+    permission: 'custody_transfer.approve',
+    defaultSteps: [
+      {
+        code: 'receiving_hod',
+        name: 'Receiving HOD',
+        approverType: 'RULE',
+        approver: 'HOD_OF_SUBJECT_DEPARTMENT',
+        mode: 'ANY',
+        allowDelegation: true,
+      },
+    ],
+  },
+  'asset_loss.approval': {
+    module: 'B3',
+    name: 'Asset loss / theft',
+    description: 'Confirms a loss or theft report: the asset becomes lost',
+    permission: 'asset_loss.approve',
+    defaultSteps: [
+      {
+        code: 'owning_hod',
+        name: 'Owning department HOD',
+        approverType: 'RULE',
+        approver: 'HOD_OF_SUBJECT_DEPARTMENT',
+        mode: 'ANY',
+        allowDelegation: true,
+      },
+      {
+        code: 'store_managers',
+        name: 'Store Managers',
+        approverType: 'GROUP',
+        approver: 'STORE_MANAGERS',
+        mode: 'ANY',
+      },
+    ],
+  },
+  'asset_responsibility.approval': {
+    module: 'B3',
+    name: 'Responsibility decision',
+    description:
+      'Wear, accident, negligence or under investigation — decision and reason only, no amounts',
+    permission: 'asset_responsibility.approve',
+    defaultSteps: [
+      {
+        code: 'owning_hod',
+        name: 'Owning department HOD',
+        approverType: 'RULE',
+        approver: 'HOD_OF_SUBJECT_DEPARTMENT',
+        mode: 'ANY',
+        allowDelegation: true,
+      },
+      {
+        code: 'hr',
+        name: 'HR',
+        approverType: 'GROUP',
+        approver: 'HR',
+        mode: 'ANY',
+      },
+    ],
+  },
+  'return.approval': {
+    module: 'B3',
+    name: 'Return',
+    description: 'Returns to a store. No steps by default.',
+    defaultSteps: [],
+  },
 };

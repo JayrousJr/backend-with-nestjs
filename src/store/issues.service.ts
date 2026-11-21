@@ -12,6 +12,7 @@ import { AccessService } from '@access';
 import { AuditService } from '../audit/audit.service';
 import { NumberingService } from '../numbering/numbering.service';
 import { LedgerService } from './ledger.service';
+import { RequestsService } from '../requests/requests.service';
 import { ReorderService } from './reorder.service';
 import { locationPath, StoresService } from './stores.service';
 import type { CreateStockDocumentInput } from './transfers.types';
@@ -40,6 +41,7 @@ export class IssuesService {
     private readonly stores: StoresService,
     private readonly reorder: ReorderService,
     private readonly events: EventEmitter2,
+    private readonly requests: RequestsService,
   ) {}
 
   async create(actor: CurrentUser, input: CreateStockDocumentInput) {
@@ -53,6 +55,36 @@ export class IssuesService {
     let departmentId: number | null = null;
     let employeeId: number | null = null;
     let label = '';
+    // Delivery against an internal request: beneficiary comes from the request.
+    const ir = input.internalRequestUniqueId
+      ? await this.prisma.db.internalRequest.findUnique({
+          where: { uniqueId: input.internalRequestUniqueId },
+        })
+      : null;
+    if (input.internalRequestUniqueId && (!ir || input.type !== 'ISSUE')) {
+      throw new BadRequestException('errors.request_status');
+    }
+    if (ir) {
+      if (ir.storeId && ir.storeId !== store.id) {
+        throw new BadRequestException('errors.request_other_store');
+      }
+      input.reference = ir.number;
+      if (ir.beneficiaryEmployeeId) {
+        input.beneficiaryType = 'EMPLOYEE';
+        input.employeeUniqueId = (
+          await this.prisma.db.employee.findUniqueOrThrow({
+            where: { id: ir.beneficiaryEmployeeId },
+          })
+        ).uniqueId;
+      } else {
+        input.beneficiaryType = 'DEPARTMENT';
+        input.departmentUniqueId = (
+          await this.prisma.db.department.findUniqueOrThrow({
+            where: { id: ir.requestingDepartmentId },
+          })
+        ).uniqueId;
+      }
+    }
     if (input.beneficiaryType === 'DEPARTMENT' && input.departmentUniqueId) {
       const d = await this.prisma.db.department.findUnique({
         where: { uniqueId: input.departmentUniqueId },
@@ -153,6 +185,16 @@ export class IssuesService {
             beneficiary,
           },
         );
+      }
+      if (ir) {
+        for (const l of lines) {
+          await this.requests.recordDelivery(
+            tx,
+            ir.id,
+            l.productId,
+            l.quantity,
+          );
+        }
       }
       await this.audit.log(
         {

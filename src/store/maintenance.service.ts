@@ -14,7 +14,7 @@ import type {
   MaintenanceStatus,
   Prisma,
 } from '@db';
-import { PrismaService } from '@prisma';
+import { anyOf, PrismaService } from '@prisma';
 import type { CurrentUser } from '@common';
 import { AccessService } from '@access';
 import { AuditService } from '../audit/audit.service';
@@ -25,6 +25,8 @@ import { StoresService } from './stores.service';
 
 /** B2 §13: Store → Module 07. */
 export const VEHICLE_DOCUMENT_EXPIRING = 'vehicle.document_expiring';
+/** Emitted when a ticket is closed: { ticketId, assetId }. */
+export const MAINTENANCE_COMPLETED = 'maintenance.completed';
 
 const SUBJECT = 'MaintenanceTicket';
 const CLOSED: MaintenanceStatus[] = ['COMPLETED', 'CANCELLED'];
@@ -291,6 +293,10 @@ export class MaintenanceService {
         tx,
       );
     });
+    this.events.emit(MAINTENANCE_COMPLETED, {
+      ticketId: t.id,
+      assetId: asset.id,
+    });
     return this.get(actor, uniqueId);
   }
 
@@ -443,7 +449,7 @@ export class MaintenanceService {
     if (!or.length) throw new ForbiddenException('errors.forbidden');
     const assets = await this.prisma.db.asset.findMany({
       where: {
-        AND: [{ OR: or }, assetUniqueId ? { uniqueId: assetUniqueId } : {}],
+        AND: [anyOf(or), assetUniqueId ? { uniqueId: assetUniqueId } : {}],
       },
       select: { id: true },
     });

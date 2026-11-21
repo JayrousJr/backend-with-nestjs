@@ -48,6 +48,8 @@ import { ReportsModule } from './reports/reports.module';
 import { NumberingModule } from './numbering/numbering.module';
 import { ProductsModule } from './products/products.module';
 import { StoreModule } from './store/store.module';
+import { RequestsModule } from './requests/requests.module';
+import { CustodyModule } from './custody/custody.module';
 import { StorageModule } from './storage/storage.module';
 import { EventsModule } from './events/events.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -135,6 +137,8 @@ import { I18nSuccessInterceptor } from '@common/interceptors/i18n-success.interc
     NumberingModule,
     ProductsModule,
     StoreModule,
+    RequestsModule,
+    CustodyModule,
     ReportsModule,
     UsersModule,
     HealthModule,

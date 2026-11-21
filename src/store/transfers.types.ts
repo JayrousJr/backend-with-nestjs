@@ -267,6 +267,13 @@ export class CreateStockDocumentInput {
   @Field(() => String, { nullable: true })
   reference?: string;
   @IsOptional()
+  @IsString()
+  @Field(() => String, {
+    nullable: true,
+    description: 'Deliver against this internal request',
+  })
+  internalRequestUniqueId?: string;
+  @IsOptional()
   @Length(0, 1000)
   @Field(() => String, { nullable: true })
   note?: string;

@@ -266,6 +266,11 @@ export class ExitClearanceService implements OnModuleInit {
       item.clearance.employeeId === actor.employeeId,
     );
 
+    // Custody items close only by return, custody transfer or an approved
+    // loss / damage report with a responsibility decision (B3 §9).
+    if (item.type === 'CUSTODY') {
+      throw new BadRequestException('errors.clearance_custody_item');
+    }
     let resolution: string;
     const user = await this.prisma.db.user.findUnique({
       where: { employeeId: item.clearance.employeeId },

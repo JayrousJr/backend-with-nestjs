@@ -86,6 +86,9 @@ async function bootstrap() {
     if (
       req.path === '/graphql' ||
       req.path.startsWith('/auth/') ||
+      // Handover acknowledgement by email link: the single-use token in the
+      // URL is the credential; no ambient cookie is involved (B3 §4.3).
+      req.path.startsWith('/handover-ack/') ||
       req.headers.authorization?.startsWith('Bearer ')
     ) {
       return next();

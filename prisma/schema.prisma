@@ -998,6 +998,10 @@ model ProductCategory {
   name     String
   /// Asset tag series, e.g. CAM → AZM-CAM-000123.
   tagPrefix String @map("tag_prefix")
+  /// B3: terms of use accepted at handover acknowledgement.
+  termsOfUse String? @map("terms_of_use")
+  /// B3: condition inspection interval for items in custody (months).
+  inspectionMonths Int? @map("inspection_months")
 
   criteria CategoryCriterion[]
   versions ProductVersion[]
@@ -1869,4 +1873,382 @@ model Disposal {
   @@index([assetId])
   @@index([status])
   @@map("disposals")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  B1 §6 — Internal requests and purchase requests
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum InternalRequestStatus {
+  DRAFT
+  SUBMITTED
+  ACCEPTED
+  FULFILLED_FROM_STORE
+  IN_PURCHASE
+  DELIVERED
+  CLOSED
+  RETURNED
+  REJECTED
+  CANCELLED
+}
+
+/// A HOD asks another department (the product's owner) for a product, for a
+/// named employee or the department.
+model InternalRequest {
+  id       Int                   @id @default(autoincrement())
+  uniqueId String                @unique @default(uuid(7)) @map("unique_id")
+  number   String                @unique
+  status   InternalRequestStatus @default(DRAFT)
+  requestingDepartmentId Int     @map("requesting_department_id")
+  /// Null = for the department.
+  beneficiaryEmployeeId  Int?    @map("beneficiary_employee_id")
+  productId        Int           @map("product_id")
+  productVersionId Int           @map("product_version_id")
+  quantity         Int
+  requiredBy       DateTime?     @map("required_by") @db.Date
+  justification    String
+  productionRef    String?       @map("production_ref")
+  createdByUserId  Int           @map("created_by_user_id")
+  approvalRequestId Int?         @map("approval_request_id")
+  /// Owning department's acceptance (may be partial, with reason).
+  acceptedQty      Int?          @map("accepted_qty")
+  acceptNote       String?       @map("accept_note")
+  /// Fulfilment plan by the owning department.
+  storeId          Int?          @map("store_id")
+  fromStoreQty     Int           @default(0) @map("from_store_qty")
+  toPurchaseQty    Int           @default(0) @map("to_purchase_qty")
+  deliveredQty     Int           @default(0) @map("delivered_qty")
+  submittedAt      DateTime?     @map("submitted_at")
+  acceptedAt       DateTime?     @map("accepted_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  purchaseLines PurchaseRequestLine[]
+
+  @@index([requestingDepartmentId, status])
+  @@index([productId])
+  @@index([beneficiaryEmployeeId])
+  @@map("internal_requests")
+}
+
+enum PurchaseRequestStatus {
+  DRAFT
+  IN_APPROVAL
+  APPROVED
+  RETURNED
+  REJECTED
+  IN_PROCUREMENT
+  COMPLETED
+  CANCELLED
+}
+
+/// Raised by the HOD of the owning department for its own products only.
+model PurchaseRequest {
+  id       Int                   @id @default(autoincrement())
+  uniqueId String                @unique @default(uuid(7)) @map("unique_id")
+  number   String                @unique
+  status   PurchaseRequestStatus @default(DRAFT)
+  departmentId      Int          @map("department_id")
+  justification     String
+  createdByUserId   Int          @map("created_by_user_id")
+  approvalRequestId Int?         @map("approval_request_id")
+  submittedAt       DateTime?    @map("submitted_at")
+  decidedAt         DateTime?    @map("decided_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  lines PurchaseRequestLine[]
+
+  @@index([departmentId, status])
+  @@map("purchase_requests")
+}
+
+model PurchaseRequestLine {
+  id                Int     @id @default(autoincrement())
+  purchaseRequestId Int     @map("purchase_request_id")
+  lineNo            Int     @map("line_no")
+  productId         Int     @map("product_id")
+  productVersionId  Int     @map("product_version_id")
+  quantity          Int
+  /// Beneficiary for traceability only.
+  beneficiaryEmployeeId   Int?    @map("beneficiary_employee_id")
+  beneficiaryDepartmentId Int?    @map("beneficiary_department_id")
+  productionRef     String? @map("production_ref")
+  internalRequestId Int?    @map("internal_request_id")
+  note              String?
+
+  purchaseRequest PurchaseRequest  @relation(fields: [purchaseRequestId], references: [id])
+  internalRequest InternalRequest? @relation(fields: [internalRequestId], references: [id])
+
+  @@index([purchaseRequestId])
+  @@index([internalRequestId])
+  @@map("purchase_request_lines")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  B3 — Product handover & asset custody
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum HandoverStatus {
+  /// Waiting for handover.approval (no steps by default).
+  PREPARED
+  AWAITING_ACKNOWLEDGEMENT
+  ACKNOWLEDGED
+  PARTIALLY_RETURNED
+  CLOSED
+  DISPUTED
+  CANCELLED
+}
+
+enum HandoverSource {
+  INTERNAL_REQUEST
+  PURCHASE_REQUEST
+  TEMPORARY_REPLACEMENT
+  CUSTODY_TRANSFER
+  OPENING_BALANCE
+}
+
+enum AckMethod {
+  SYSTEM
+  EMAIL_LINK
+  COUNTER_CODE
+}
+
+model Handover {
+  id       Int            @id @default(autoincrement())
+  uniqueId String         @unique @default(uuid(7)) @map("unique_id")
+  number   String         @unique
+  status   HandoverStatus @default(PREPARED)
+  custodianEmployeeId   Int @map("custodian_employee_id")
+  custodianDepartmentId Int @map("custodian_department_id")
+  storeId  Int            @map("store_id")
+  source   HandoverSource
+  internalRequestId Int?  @map("internal_request_id")
+  custodyTransferId Int?  @map("custody_transfer_id")
+  /// Temporary replacement: the fault report it covers.
+  assetReportId     Int?  @map("asset_report_id")
+  sourceRef String?       @map("source_ref")
+  purpose   String
+  expectedReturnDate DateTime? @map("expected_return_date") @db.Date
+  termsText String?       @map("terms_text")
+  preparedByUserId  Int?  @map("prepared_by_user_id")
+  approvalRequestId Int?  @map("approval_request_id")
+  acknowledgedAt    DateTime?  @map("acknowledged_at")
+  ackMethod         AckMethod? @map("ack_method")
+  ackIp             String?    @map("ack_ip")
+  ackByUserId       Int?       @map("ack_by_user_id")
+  disputeNote       String?    @map("dispute_note")
+  cancelReason      String?    @map("cancel_reason")
+  remindedAt        DateTime?  @map("reminded_at")
+  returnRemindedAt  DateTime?  @map("return_reminded_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lines  HandoverLine[]
+  tokens HandoverAckToken[]
+
+  @@index([custodianEmployeeId, status])
+  @@index([storeId, status])
+  @@map("handovers")
+}
+
+model HandoverLine {
+  id          Int            @id @default(autoincrement())
+  handoverId  Int            @map("handover_id")
+  assetId     Int            @map("asset_id")
+  condition   AssetCondition
+  accessories String[]       @default([])
+  photoFileIds Int[]         @default([]) @map("photo_file_ids")
+  returnedAt  DateTime?      @map("returned_at")
+  returnId    Int?           @map("return_id")
+
+  handover Handover @relation(fields: [handoverId], references: [id])
+
+  @@index([handoverId])
+  @@index([assetId])
+  @@map("handover_lines")
+}
+
+enum AckTokenKind {
+  EMAIL_LINK
+  COUNTER_CODE
+}
+
+model HandoverAckToken {
+  id         Int          @id @default(autoincrement())
+  handoverId Int          @map("handover_id")
+  kind       AckTokenKind
+  tokenHash  String       @unique @map("token_hash")
+  expiresAt  DateTime     @map("expires_at")
+  usedAt     DateTime?    @map("used_at")
+  ip         String?
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  handover Handover @relation(fields: [handoverId], references: [id])
+
+  @@map("handover_ack_tokens")
+}
+
+/// One custody period: from acknowledged handover to accepted return.
+model Custody {
+  id          Int       @id @default(autoincrement())
+  assetId     Int       @map("asset_id")
+  custodianEmployeeId Int @map("custodian_employee_id")
+  handoverId  Int       @map("handover_id")
+  fromAt      DateTime  @default(now()) @map("from_at")
+  toAt        DateTime? @map("to_at")
+  returnId    Int?      @map("return_id")
+  /// How it ended: RETURNED, TRANSFERRED, LOST, DISPOSED.
+  endReason   String?   @map("end_reason")
+  /// Next custodian (custody transfer).
+  nextCustodyId Int?    @map("next_custody_id")
+
+  @@index([assetId, toAt])
+  @@index([custodianEmployeeId, toAt])
+  @@map("custodies")
+}
+
+enum ReturnStatus {
+  REQUESTED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+model AssetReturn {
+  id       Int          @id @default(autoincrement())
+  uniqueId String       @unique @default(uuid(7)) @map("unique_id")
+  number   String       @unique
+  status   ReturnStatus @default(REQUESTED)
+  custodianEmployeeId Int  @map("custodian_employee_id")
+  /// Receiving store (any store), set when received.
+  storeId  Int?         @map("store_id")
+  /// RETURN_REQUEST, RECALL, OVERDUE, EXIT, TRANSFER, END_OF_REPLACEMENT
+  trigger  String
+  reason   String?
+  requestedByUserId Int? @map("requested_by_user_id")
+  receivedByUserId  Int? @map("received_by_user_id")
+  receivedAt DateTime?  @map("received_at")
+  custodyTransferId Int? @map("custody_transfer_id")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  lines AssetReturnLine[]
+
+  @@index([custodianEmployeeId, status])
+  @@map("asset_returns")
+}
+
+model AssetReturnLine {
+  id          Int             @id @default(autoincrement())
+  returnId    Int             @map("return_id")
+  assetId     Int             @map("asset_id")
+  received    Boolean         @default(false)
+  condition   AssetCondition?
+  accessoriesReturned String[] @default([]) @map("accessories_returned")
+  missing     String?
+  photoFileIds Int[]          @default([]) @map("photo_file_ids")
+  note        String?
+
+  ret AssetReturn @relation(fields: [returnId], references: [id])
+
+  @@index([returnId])
+  @@map("asset_return_lines")
+}
+
+enum AssetReportType {
+  FAULT
+  DAMAGE
+  LOSS
+  THEFT
+}
+
+enum AssetReportStatus {
+  OPEN
+  /// Loss / theft waiting for asset_loss.approval.
+  IN_APPROVAL
+  CONFIRMED
+  REJECTED
+  CLOSED
+}
+
+enum ResponsibilityDecision {
+  NORMAL_WEAR
+  ACCIDENT
+  NEGLIGENCE
+  UNDER_INVESTIGATION
+}
+
+model AssetReport {
+  id       Int               @id @default(autoincrement())
+  uniqueId String            @unique @default(uuid(7)) @map("unique_id")
+  number   String            @unique
+  type     AssetReportType
+  status   AssetReportStatus @default(OPEN)
+  assetId  Int               @map("asset_id")
+  custodianEmployeeId Int?   @map("custodian_employee_id")
+  occurredAt DateTime        @map("occurred_at")
+  circumstances String
+  stillUsable Boolean        @default(true) @map("still_usable")
+  fileIds  Int[]             @default([]) @map("file_ids")
+  reportedByUserId Int?      @map("reported_by_user_id")
+  /// Created automatically from a return with a worse condition.
+  automatic Boolean          @default(false)
+  maintenanceTicketId Int?   @map("maintenance_ticket_id")
+  lossApprovalRequestId Int? @map("loss_approval_request_id")
+  responsibility ResponsibilityDecision?
+  responsibilityReason String? @map("responsibility_reason")
+  /// PENDING, APPROVED, REJECTED
+  responsibilityStatus String? @map("responsibility_status")
+  responsibilityRequestId Int? @map("responsibility_request_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([assetId])
+  @@index([custodianEmployeeId])
+  @@map("asset_reports")
+}
+
+model AssetInspection {
+  id       Int            @id @default(autoincrement())
+  uniqueId String         @unique @default(uuid(7)) @map("unique_id")
+  assetId  Int            @map("asset_id")
+  custodianEmployeeId Int? @map("custodian_employee_id")
+  condition AssetCondition
+  checklist Json?
+  remarks   String?
+  fileIds   Int[]         @default([]) @map("file_ids")
+  inspectedByUserId Int   @map("inspected_by_user_id")
+  at        DateTime      @default(now())
+
+  @@index([assetId, at])
+  @@map("asset_inspections")
+}
+
+enum CustodyTransferStatus {
+  IN_APPROVAL
+  /// Approved: the giver returns to the store, then a handover to the receiver.
+  APPROVED
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+model CustodyTransfer {
+  id       Int                   @id @default(autoincrement())
+  uniqueId String                @unique @default(uuid(7)) @map("unique_id")
+  number   String                @unique
+  status   CustodyTransferStatus @default(IN_APPROVAL)
+  assetIds Int[]                 @map("asset_ids")
+  fromEmployeeId Int             @map("from_employee_id")
+  toEmployeeId   Int             @map("to_employee_id")
+  reason   String
+  requestedByUserId Int          @map("requested_by_user_id")
+  approvalRequestId Int?         @map("approval_request_id")
+  completedAt DateTime?          @map("completed_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("custody_transfers")
 }
