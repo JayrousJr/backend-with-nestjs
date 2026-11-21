@@ -10,6 +10,8 @@ export interface DefaultStep {
   mode?: ApprovalMode;
   requiredCount?: number;
   allowDelegation?: boolean;
+  /** {path, op, value} on the request context; false = step skipped. */
+  condition?: { path: string; op: string; value: unknown };
 }
 
 export interface ApprovalPointDefinition {
@@ -26,6 +28,7 @@ export const ASSIGNEE_RULES = {
   HOD_OF_SUBJECT_DEPARTMENT: 'HOD (or acting HOD) of the record’s department',
   HOD_OF_REQUESTER_DEPARTMENT:
     'HOD (or acting HOD) of the requester’s department',
+  TENDER_COMMITTEE: 'Members of the tender’s evaluation committee',
 } as const;
 export type AssigneeRule = keyof typeof ASSIGNEE_RULES;
 
@@ -177,6 +180,111 @@ export const APPROVAL_POINTS: Record<string, ApprovalPointDefinition> = {
         approver: 'HOD_OF_SUBJECT_DEPARTMENT',
         mode: 'ANY',
         allowDelegation: true,
+      },
+    ],
+  },
+  'single_source.justification': {
+    module: 'B1T',
+    name: 'Single-source justification',
+    description: 'CEO approves buying from the single designated vendor',
+    permission: 'single_source.approve',
+    defaultSteps: [
+      {
+        code: 'ceo_approval',
+        name: 'CEO approval',
+        approverType: 'ROLE',
+        approver: 'CEO',
+        allowDelegation: false,
+      },
+    ],
+  },
+  'tender.award_approval': {
+    module: 'B1T',
+    name: 'Tender award',
+    description:
+      'All committee members (conflict-of-interest declared) → CEO final approval (always runs)',
+    permission: 'tender.approve_award',
+    defaultSteps: [
+      {
+        code: 'committee_approval',
+        name: 'Committee approval',
+        approverType: 'RULE',
+        approver: 'TENDER_COMMITTEE',
+        mode: 'ALL',
+        allowDelegation: false,
+      },
+      {
+        code: 'ceo_final_approval',
+        name: 'CEO final approval',
+        approverType: 'ROLE',
+        approver: 'CEO',
+        allowDelegation: false,
+      },
+    ],
+  },
+  'purchase_order.issue': {
+    module: 'B1T',
+    name: 'LPO issue',
+    description: 'Procurement Officer issues the LPO to the vendor',
+    permission: 'lpo.approve',
+    defaultSteps: [
+      {
+        code: 'purchasing_review',
+        name: 'Purchasing review',
+        approverType: 'ROLE',
+        approver: 'Procurement Officer',
+      },
+    ],
+  },
+  'purchase_order.amendment': {
+    module: 'B1T',
+    name: 'LPO amendment',
+    description:
+      'Procurement Officer → CEO only when the total value increases',
+    permission: 'lpo.approve',
+    defaultSteps: [
+      {
+        code: 'procurement_review',
+        name: 'Procurement review',
+        approverType: 'ROLE',
+        approver: 'Procurement Officer',
+      },
+      {
+        code: 'ceo_approval',
+        name: 'CEO approval (value increase)',
+        approverType: 'ROLE',
+        approver: 'CEO',
+        allowDelegation: false,
+        condition: { path: 'increasesValue', op: 'eq', value: true },
+      },
+    ],
+  },
+  'purchase_order.cancellation': {
+    module: 'B1T',
+    name: 'LPO cancellation',
+    description: 'CEO approves cancelling an LPO (reason mandatory)',
+    permission: 'lpo.approve',
+    defaultSteps: [
+      {
+        code: 'ceo_approval',
+        name: 'CEO approval',
+        approverType: 'ROLE',
+        approver: 'CEO',
+        allowDelegation: false,
+      },
+    ],
+  },
+  'payment_request.approval': {
+    module: 'B1T',
+    name: 'Payment',
+    description: 'Finance approves paying a matched invoice (manual payment)',
+    permission: 'payment_request.approve',
+    defaultSteps: [
+      {
+        code: 'finance_approval',
+        name: 'Finance approval',
+        approverType: 'ROLE',
+        approver: 'Finance',
       },
     ],
   },

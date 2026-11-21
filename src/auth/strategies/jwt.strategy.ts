@@ -25,6 +25,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: JwtPayload): Promise<CurrentUser> {
+    // Vendor-portal and challenge tokens are never staff credentials.
+    if ((payload as { typ?: string }).typ) throw new UnauthorizedException();
     const now = new Date();
     const [user, session] = await Promise.all([
       this.prisma.db.user.findFirst({

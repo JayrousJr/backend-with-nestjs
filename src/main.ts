@@ -89,6 +89,8 @@ async function bootstrap() {
       // Handover acknowledgement by email link: the single-use token in the
       // URL is the credential; no ambient cookie is involved (B3 §4.3).
       req.path.startsWith('/handover-ack/') ||
+      // Vendor portal sign-in: credentials are body fields, never cookies.
+      req.path.startsWith('/portal/auth/') ||
       req.headers.authorization?.startsWith('Bearer ')
     ) {
       return next();

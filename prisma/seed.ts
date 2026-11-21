@@ -147,6 +147,8 @@ async function seedDemo() {
     ['STOREKEEPER', 'Storekeeper'],
     ['STORE_MGR', 'Store Manager'],
     ['CEO', 'Chief Executive Officer'],
+    ['ACCOUNTANT', 'Accountant'],
+    ['CAM_TECH', 'Camera Technician'],
   ];
   const titleId = new Map<string, number>();
   for (const [code, name] of titles) {
@@ -204,7 +206,7 @@ async function seedDemo() {
       email: `hod.camera@${domain}`,
       dept: 'CAM',
       title: 'HOD',
-      roles: ['Head of Department', 'Staff'],
+      roles: ['Head of Department', 'Committee Member', 'Staff'],
       user: true,
       hodOf: 'CAM',
     },
@@ -273,7 +275,12 @@ async function seedDemo() {
       email: `store.manager@${domain}`,
       dept: 'STORE',
       title: 'STORE_MGR',
-      roles: ['Store Manager', 'Head of Department', 'Staff'],
+      roles: [
+        'Store Manager',
+        'Head of Department',
+        'Committee Member',
+        'Staff',
+      ],
       user: true,
       hodOf: 'STORE',
       groups: ['STORE_MANAGERS', 'DISPOSAL_COMMITTEE'],
@@ -290,6 +297,52 @@ async function seedDemo() {
       roles: ['CEO', 'Staff'],
       user: true,
       hodOf: 'MGT',
+    },
+    {
+      number: 'AZ0012',
+      first: 'Mariam',
+      last: 'Juma',
+      gender: 'FEMALE',
+      email: `finance@${domain}`,
+      dept: 'FIN',
+      title: 'ACCOUNTANT',
+      roles: ['Finance', 'Committee Member', 'Staff'],
+      user: true,
+      hodOf: 'FIN',
+    },
+    {
+      number: 'AZ0013',
+      first: 'Peter',
+      last: 'Massawe',
+      gender: 'MALE',
+      email: `accounts@${domain}`,
+      dept: 'FIN',
+      title: 'ACCOUNTANT',
+      roles: ['Finance', 'Staff'],
+      user: true,
+    },
+    {
+      number: 'AZ0014',
+      first: 'Joseph',
+      last: 'Kimaro',
+      gender: 'MALE',
+      email: `camera.tech@${domain}`,
+      dept: 'CAM',
+      title: 'CAM_TECH',
+      roles: ['Committee Member', 'Staff'],
+      user: true,
+      inspects: 'CAM',
+    },
+    {
+      number: 'AZ0015',
+      first: 'Halima',
+      last: 'Nyerere',
+      gender: 'FEMALE',
+      email: `procurement2@${domain}`,
+      dept: 'PROC',
+      title: 'PROC_OFFICER',
+      roles: ['Procurement Officer', 'Staff'],
+      user: true,
     },
   ] as const;
 
@@ -412,6 +465,25 @@ async function seedDemo() {
             userId: u.id,
             roleId: counter.id,
             contextType: 'STORE',
+            contextId,
+          },
+        });
+      }
+    }
+    if ('inspects' in p) {
+      const inspector = await prisma.role.findUniqueOrThrow({
+        where: { name: 'Inspector' },
+      });
+      const contextId = deptId.get(p.inspects)!;
+      const exists = await prisma.userRole.findFirst({
+        where: { userId: u.id, roleId: inspector.id, contextId },
+      });
+      if (!exists) {
+        await prisma.userRole.create({
+          data: {
+            userId: u.id,
+            roleId: inspector.id,
+            contextType: 'DEPARTMENT',
             contextId,
           },
         });

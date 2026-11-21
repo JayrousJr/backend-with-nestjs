@@ -22,6 +22,6 @@ import { MailModule } from '../mail/mail.module';
     TwoFactorService,
     JwtStrategy,
   ],
-  exports: [TwoFactorService],
+  exports: [TwoFactorService, PasswordPolicyService],
 })
 export class AuthModule {}

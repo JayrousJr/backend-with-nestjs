@@ -153,6 +153,7 @@ export class WorkflowService implements OnApplicationBootstrap {
         mode: s.mode ?? 'ANY',
         requiredCount: s.requiredCount ?? 1,
         allowDelegation: s.allowDelegation ?? true,
+        ...(s.condition ? { condition: s.condition as object } : {}),
       });
     }
     const version = await this.prisma.dbRaw.approvalChainVersion.create({
@@ -401,7 +402,11 @@ export class WorkflowService implements OnApplicationBootstrap {
       | 'approverRoleId'
       | 'rule'
     >,
-    req: { subjectDepartmentId: number | null; requesterUserId: number | null },
+    req: {
+      subjectDepartmentId: number | null;
+      requesterUserId: number | null;
+      context?: Prisma.JsonValue;
+    },
     tx?: DbTx,
   ): Promise<number[]> {
     const db = tx ?? this.prisma.db;
@@ -450,6 +455,20 @@ export class WorkflowService implements OnApplicationBootstrap {
         return users.map((u) => u.id);
       }
       case 'RULE': {
+        if (step.rule === 'TENDER_COMMITTEE') {
+          const tenderId = Number(
+            (req.context as { tenderId?: number } | null)?.tenderId ?? -1,
+          );
+          const members = await db.tenderCommitteeMember.findMany({
+            where: { tenderId },
+            select: { userId: true },
+          });
+          const users = await db.user.findMany({
+            where: { id: { in: members.map((m) => m.userId) }, ...active },
+            select: { id: true },
+          });
+          return users.map((u) => u.id);
+        }
         let deptId: number | null = null;
         if (step.rule === 'HOD_OF_SUBJECT_DEPARTMENT')
           deptId = req.subjectDepartmentId;

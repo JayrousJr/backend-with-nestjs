@@ -7,7 +7,7 @@ import { AccessService } from './access.service';
 import { PERMISSION_CATALOGUE } from './catalogue';
 
 /** Modules whose action permissions administrators may not hold. */
-const PROCUREMENT_MODULES = new Set(['B1']);
+const PROCUREMENT_MODULES = new Set(['B1', 'B1T']);
 /** Permissions that make a user an "administrator" for SOD_ADMIN_PROCUREMENT. */
 const ADMIN_PERMISSIONS = ['role.manage', 'user.assign_role'];
 const MIN_ROLE_MANAGERS = 2;

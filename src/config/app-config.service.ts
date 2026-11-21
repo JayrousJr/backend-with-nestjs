@@ -56,6 +56,14 @@ export class AppConfigService {
     return this.config.getOrThrow<string>('TWO_FACTOR_ENCRYPTION_KEY');
   }
 
+  /** Seals vendor bids until opening (AES-256-GCM). Separate key in production. */
+  get bidSealKey(): string {
+    return (
+      this.config.get<string>('BID_SEAL_KEY') ||
+      `${this.twoFactorKey}:sealed-bids`
+    );
+  }
+
   get jwtAccess() {
     return {
       secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),

@@ -171,6 +171,48 @@ export class AccessService {
     return (await this.cache.get<number>(VERSION_KEY)) ?? 1;
   }
 
+  /** Active users holding a permission through their roles or groups (for notifications). */
+  async usersWithPermission(permission: PermissionCode): Promise<number[]> {
+    const users = await this.prisma.dbRaw.user.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [
+          {
+            roles: {
+              some: {
+                role: {
+                  isActive: true,
+                  isDeleted: false,
+                  grants: { some: { permissionCode: permission } },
+                },
+              },
+            },
+          },
+          {
+            groups: {
+              some: {
+                group: {
+                  isActive: true,
+                  roles: {
+                    some: {
+                      role: {
+                        isActive: true,
+                        isDeleted: false,
+                        grants: { some: { permissionCode: permission } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+    return users.map((u) => u.id);
+  }
+
   /** Distinct permission codes the user holds with any scope. */
   async getPermissionCodes(userId: number): Promise<string[]> {
     const grants = await this.getGrants(userId);

@@ -5,7 +5,7 @@
  * Values here are the AzamTV go-live values (user-employee-spec.md §7, §9).
  */
 export interface PolicyDefinition {
-  category: 'SOD' | 'SECURITY';
+  category: 'SOD' | 'SECURITY' | 'PROCUREMENT';
   description: string;
   enabled: boolean;
   parameters?: Record<string, unknown>;
@@ -61,6 +61,99 @@ export const POLICY_CATALOGUE = {
     category: 'SOD',
     description: 'The proposer of a disposal cannot give its final approval',
     enabled: true,
+  },
+  // ── Separation of duties (B1 sourcing, tender spec §12 + access-control §5) ──
+  SOD_REVIEW_TENDER: {
+    category: 'SOD',
+    description:
+      'Whoever did the procurement review of a request cannot create its tender',
+    enabled: true,
+  },
+  SOD_TENDER_COMMITTEE: {
+    category: 'SOD',
+    description:
+      'The officer who created or published a tender is not on its committee',
+    enabled: true,
+  },
+  SOD_COMMITTEE_COI: {
+    category: 'SOD',
+    description:
+      'A committee member cannot act before declaring no conflict of interest',
+    enabled: true,
+  },
+  SOD_AWARD_COMMITTEE: {
+    category: 'SOD',
+    description:
+      'The final award approver (CEO) cannot sit on that tender’s committee',
+    enabled: true,
+  },
+  SOD_RECEIVE_INSPECT: {
+    category: 'SOD',
+    description: 'Whoever recorded the GRN cannot inspect the same delivery',
+    enabled: true,
+  },
+  SOD_REQUEST_INSPECT: {
+    category: 'SOD',
+    description: 'The requester cannot inspect their own request’s items',
+    enabled: true,
+  },
+  SOD_LPO_RECEIVE: {
+    category: 'SOD',
+    description: 'Whoever issued the LPO cannot record its GRN',
+    enabled: true,
+  },
+  SOD_INVOICE_PAYMENT: {
+    category: 'SOD',
+    description: 'Whoever registered the invoice cannot approve its payment',
+    enabled: true,
+  },
+  // ── Procurement policies (requirements §3.9; tender spec §2, §14) ──
+  PROC_CASH_THRESHOLD: {
+    category: 'PROCUREMENT',
+    description:
+      'Cash purchase threshold (TZS): lines below it may be bought for cash. AzamTV to set.',
+    enabled: true,
+    parameters: { amount: 500000 },
+  },
+  PROC_MIN_QUOTATIONS: {
+    category: 'PROCUREMENT',
+    description:
+      'Minimum number of quotations per item (disabled: one compliant quotation can win)',
+    enabled: false,
+    parameters: { count: 3 },
+  },
+  PROC_OPENING_CONFIRMATIONS: {
+    category: 'PROCUREMENT',
+    description: 'Committee confirmations needed to open sealed bids',
+    enabled: true,
+    parameters: { count: 2 },
+  },
+  PROC_CLARIFICATIONS: {
+    category: 'PROCUREMENT',
+    description:
+      'Clarification deadline before closing (hours) and closing extension after an addendum (days)',
+    enabled: true,
+    parameters: { deadlineHours: 48, addendumExtensionDays: 3 },
+  },
+  PROC_BID_VALIDITY: {
+    category: 'PROCUREMENT',
+    description: 'Minimum bid validity (days)',
+    enabled: true,
+    parameters: { days: 90 },
+  },
+  PROC_VENDOR_VALIDITY: {
+    category: 'PROCUREMENT',
+    description:
+      'Vendor registration validity (years); renewal reminder (days before)',
+    enabled: true,
+    parameters: { years: 2, reminderDays: 30 },
+  },
+  PROC_STANDSTILL: {
+    category: 'PROCUREMENT',
+    description:
+      'Standstill period (days) between award notification and LPO issue (public-sector rule, off)',
+    enabled: false,
+    parameters: { days: 7 },
   },
   SOD_HANDOVER_SELF: {
     category: 'SOD',
