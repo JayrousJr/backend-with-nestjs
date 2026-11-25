@@ -6,20 +6,6 @@
     "deleteOutDir": true,
     "webpack": true,
     "webpackConfigPath": "webpack-hmr.config.js",
-    "tsConfigPath": "tsconfig.build.json",
-    "plugins": [
-      {
-        "name": "@nestjs/graphql",
-        "options": {
-          "typeFileNameSuffix": [
-            ".type.ts",
-            ".model.ts",
-            ".input.ts",
-            ".args.ts"
-          ],
-          "introspectComments": true
-        }
-      }
-    ]
+    "tsConfigPath": "tsconfig.build.json"
   }
 }
